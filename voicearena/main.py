@@ -185,8 +185,8 @@ async def transcribe_audio(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="."), name="static")
 
 @app.get("/")
 async def read_root():
-    return FileResponse("static/index.html")
+    return FileResponse("index.html")
