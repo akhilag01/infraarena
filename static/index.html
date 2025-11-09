@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Arena</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Voice Arena</h1>
+            <p class="subtitle">Compare TTS models side by side</p>
+        </header>
+
+        <main id="main-content">
+            <div id="start-screen" class="screen active">
+                <button id="start-btn" class="primary-btn">Start Conversation</button>
+                <button id="leaderboard-btn" class="secondary-btn">View Leaderboard</button>
+            </div>
+
+            <div id="chat-screen" class="screen">
+                <div id="chat-messages" class="chat-messages"></div>
+                
+                <div id="vote-prompt" class="vote-prompt hidden">
+                    <p>Which voice did you prefer?</p>
+                    <div class="vote-buttons">
+                        <button class="vote-btn" data-vote="A">Voice A</button>
+                        <button class="vote-btn" data-vote="B">Voice B</button>
+                    </div>
+                </div>
+
+                <div class="input-container">
+                    <div class="input-wrapper">
+                        <input type="text" id="message-input" placeholder="Type your message..." />
+                        <button id="send-btn" class="icon-btn">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M2 10L18 3L13 10L18 17L2 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <button id="voice-btn" class="voice-btn">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 1C10.34 1 9 2.34 9 4V12C9 13.66 10.34 15 12 15C13.66 15 15 13.66 15 12V4C15 2.34 13.66 1 12 1Z" fill="currentColor"/>
+                            <path d="M19 10V12C19 15.87 15.87 19 12 19C8.13 19 5 15.87 5 12V10H3V12C3 16.97 7.03 21 12 21C16.97 21 21 16.97 21 12V10H19Z" fill="currentColor"/>
+                            <path d="M11 21V23H13V21H11Z" fill="currentColor"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div id="leaderboard-screen" class="screen">
+                <div class="leaderboard-header">
+                    <h2>Leaderboard</h2>
+                    <button id="back-btn" class="secondary-btn">Back</button>
+                </div>
+                <div id="leaderboard-content" class="leaderboard-content"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+alembic
+python-dotenv
+openai
+elevenlabs
+deepgram-sdk
+cartesia
+pydantic
+httpx
+websockets
+python-multipart

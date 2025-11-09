@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.env
+voice_arena.db
+*.db
+.claude/
+KEYS.md
+venv/
+.DS_Store
