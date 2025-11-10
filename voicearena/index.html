@@ -55,8 +55,26 @@
     <div class="main-wrapper">
         <div class="container">
             <header>
-                <h1>Voice Arena</h1>
-                <p class="subtitle">Compare TTS models side by side</p>
+                <div class="header-content">
+                    <div class="header-title">
+                        <h1>Voice Arena</h1>
+                        <p class="subtitle">Compare TTS models side by side</p>
+                    </div>
+                    <button id="header-login-btn" class="header-login-btn">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm0 2c-4.42 0-8 1.79-8 4v2h16v-2c0-2.21-3.58-4-8-4z"/>
+                        </svg>
+                        Login
+                    </button>
+                    <div id="header-user-profile" class="header-user-profile hidden">
+                        <div class="user-avatar">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm0 2c-4.42 0-8 1.79-8 4v2h16v-2c0-2.21-3.58-4-8-4z"/>
+                            </svg>
+                        </div>
+                        <span class="header-user-email" id="header-user-email"></span>
+                    </div>
+                </div>
             </header>
 
             <main id="main-content">
@@ -107,18 +125,15 @@
     <div id="login-modal" class="modal hidden">
         <div class="modal-content">
             <button class="modal-close" id="modal-close">&times;</button>
-            <h2>Login</h2>
-            <div class="login-tabs">
-                <button class="tab-btn active" data-tab="email">Email</button>
-                <button class="tab-btn" data-tab="google">Google</button>
-            </div>
-            <div id="email-tab" class="tab-content active">
+            <h2>Login / Sign Up</h2>
+            <div class="login-form">
                 <input type="email" id="email-input" placeholder="Email" />
                 <input type="password" id="password-input" placeholder="Password" />
                 <button id="email-login-btn" class="primary-btn">Login</button>
                 <button id="email-signup-btn" class="secondary-btn">Sign Up</button>
-            </div>
-            <div id="google-tab" class="tab-content">
+                <div class="divider">
+                    <span>OR</span>
+                </div>
                 <button id="google-login-btn" class="google-btn">
                     <svg width="20" height="20" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>

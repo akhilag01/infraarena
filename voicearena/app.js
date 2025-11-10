@@ -15,10 +15,13 @@ const chatMessages = document.getElementById('chat-messages');
 const votePrompt = document.getElementById('vote-prompt');
 
 const loginBtn = document.getElementById('login-btn');
+const headerLoginBtn = document.getElementById('header-login-btn');
 const loginModal = document.getElementById('login-modal');
 const modalClose = document.getElementById('modal-close');
 const userProfile = document.getElementById('user-profile');
+const headerUserProfile = document.getElementById('header-user-profile');
 const userEmail = document.getElementById('user-email');
+const headerUserEmail = document.getElementById('header-user-email');
 const logoutBtn = document.getElementById('logout-btn');
 const emailLoginBtn = document.getElementById('email-login-btn');
 const emailSignupBtn = document.getElementById('email-signup-btn');
@@ -68,14 +71,9 @@ function addMessage(text, isUser, audioDataA = null, audioDataB = null) {
     return messageDiv;
 }
 
-function addGeneratingPlaceholder(text) {
+function addGeneratingPlaceholder() {
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message assistant';
-    
-    const textDiv = document.createElement('div');
-    textDiv.className = 'message-text';
-    textDiv.textContent = text;
-    messageDiv.appendChild(textDiv);
     
     const voicesContainer = document.createElement('div');
     voicesContainer.className = 'voices-container';
@@ -236,7 +234,7 @@ async function sendMessage(message) {
     addMessage(message, true);
     messageInput.value = '';
     
-    const placeholder = addGeneratingPlaceholder('Generating response...');
+    const placeholder = addGeneratingPlaceholder();
     
     try {
         const response = await fetch('/api/chat', {
@@ -250,6 +248,8 @@ async function sendMessage(message) {
         placeholder.remove();
         
         addMessage(data.text, false, data.audio_a, data.audio_b);
+        
+        chatMessages.scrollTop = chatMessages.scrollHeight;
         
         if (data.should_vote) {
             showVotePrompt();
@@ -477,6 +477,32 @@ document.querySelectorAll('.vote-btn').forEach(btn => {
         const winner = btn.dataset.vote;
         submitVote(winner);
     });
+    
+    btn.addEventListener('mouseenter', () => {
+        const vote = btn.dataset.vote;
+        if (currentVoiceCards.voiceA && currentVoiceCards.voiceB) {
+            if (vote === 'A') {
+                currentVoiceCards.voiceA.classList.add('preview-winner');
+                currentVoiceCards.voiceB.classList.add('preview-loser');
+            } else if (vote === 'B') {
+                currentVoiceCards.voiceB.classList.add('preview-winner');
+                currentVoiceCards.voiceA.classList.add('preview-loser');
+            } else if (vote === 'tie') {
+                currentVoiceCards.voiceA.classList.add('preview-winner');
+                currentVoiceCards.voiceB.classList.add('preview-winner');
+            } else if (vote === 'both_bad') {
+                currentVoiceCards.voiceA.classList.add('preview-loser');
+                currentVoiceCards.voiceB.classList.add('preview-loser');
+            }
+        }
+    });
+    
+    btn.addEventListener('mouseleave', () => {
+        if (currentVoiceCards.voiceA && currentVoiceCards.voiceB) {
+            currentVoiceCards.voiceA.classList.remove('preview-winner', 'preview-loser');
+            currentVoiceCards.voiceB.classList.remove('preview-winner', 'preview-loser');
+        }
+    });
 });
 
 const sidebar = document.getElementById('sidebar');
@@ -510,17 +536,26 @@ function updateUIForUser(user) {
     currentUser = user;
     if (user) {
         loginBtn.classList.add('hidden');
+        headerLoginBtn.classList.add('hidden');
         userProfile.classList.remove('hidden');
+        headerUserProfile.classList.remove('hidden');
         userEmail.textContent = user.email;
+        headerUserEmail.textContent = user.email;
     } else {
         loginBtn.classList.remove('hidden');
+        headerLoginBtn.classList.remove('hidden');
         userProfile.classList.add('hidden');
+        headerUserProfile.classList.add('hidden');
         currentUser = null;
         authToken = null;
     }
 }
 
 loginBtn.addEventListener('click', () => {
+    loginModal.classList.remove('hidden');
+});
+
+headerLoginBtn.addEventListener('click', () => {
     loginModal.classList.remove('hidden');
 });
 
@@ -534,15 +569,6 @@ loginModal.addEventListener('click', (e) => {
     }
 });
 
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(`${tab}-tab`).classList.add('active');
-    });
-});
 
 emailLoginBtn.addEventListener('click', async () => {
     try {

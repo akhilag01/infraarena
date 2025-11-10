@@ -100,6 +100,20 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Session not found")
     
     conv = conversation_store[request.session_id]
+    
+    models = db.query(TTSModel).all()
+    if len(models) < 2:
+        raise HTTPException(status_code=500, detail="Not enough TTS models available")
+    
+    selected_models = random.sample(models, 2)
+    
+    conv["model_a"] = selected_models[0].name
+    conv["model_b"] = selected_models[1].name
+    conv["model_a_provider"] = selected_models[0].provider
+    conv["model_b_provider"] = selected_models[1].provider
+    conv["model_a_id"] = selected_models[0].id
+    conv["model_b_id"] = selected_models[1].id
+    
     conv["messages"].append({"role": "user", "content": request.message})
     
     response = openai_client.chat.completions.create(
@@ -134,8 +148,8 @@ async def vote(request: VoteRequest, db: Session = Depends(get_db)):
     if not db_session:
         raise HTTPException(status_code=404, detail="Session not found in database")
     
-    model_a = db.query(TTSModel).filter(TTSModel.id == db_session.model_a_id).first()
-    model_b = db.query(TTSModel).filter(TTSModel.id == db_session.model_b_id).first()
+    model_a = db.query(TTSModel).filter(TTSModel.id == conv["model_a_id"]).first()
+    model_b = db.query(TTSModel).filter(TTSModel.id == conv["model_b_id"]).first()
     
     if request.winner == "A":
         new_a_elo, new_b_elo = calculate_elo(model_a.elo_rating, model_b.elo_rating)
