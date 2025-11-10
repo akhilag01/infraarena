@@ -20,6 +20,8 @@ function showScreen(screen) {
     screen.classList.add('active');
 }
 
+let currentVoiceCards = { voiceA: null, voiceB: null };
+
 function addMessage(text, isUser, audioDataA = null, audioDataB = null) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
@@ -40,6 +42,9 @@ function addMessage(text, isUser, audioDataA = null, audioDataB = null) {
             
             const voiceA = createVoiceCard('A', audioDataA);
             const voiceB = createVoiceCard('B', audioDataB);
+            
+            currentVoiceCards.voiceA = voiceA;
+            currentVoiceCards.voiceB = voiceB;
             
             voicesContainer.appendChild(voiceA);
             voicesContainer.appendChild(voiceB);
@@ -222,6 +227,20 @@ async function submitVote(winner) {
         const data = await response.json();
         
         hideVotePrompt();
+        
+        if (winner === 'A') {
+            currentVoiceCards.voiceA.classList.add('winner');
+            currentVoiceCards.voiceB.classList.add('loser');
+        } else if (winner === 'B') {
+            currentVoiceCards.voiceB.classList.add('winner');
+            currentVoiceCards.voiceA.classList.add('loser');
+        } else if (winner === 'tie') {
+            currentVoiceCards.voiceA.classList.add('winner');
+            currentVoiceCards.voiceB.classList.add('winner');
+        } else if (winner === 'both_bad') {
+            currentVoiceCards.voiceA.classList.add('loser');
+            currentVoiceCards.voiceB.classList.add('loser');
+        }
         
         showModelReveal(data.model_a_name, data.model_a_provider, data.model_b_name, data.model_b_provider);
     } catch (error) {
@@ -446,4 +465,5 @@ function updateActiveNav(activeItem) {
     activeItem.classList.add('active');
 }
 
-updateActiveNav(navHome);
+startSession();
+updateActiveNav(navChat);

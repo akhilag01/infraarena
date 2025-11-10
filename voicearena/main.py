@@ -11,7 +11,7 @@ import io
 
 from database import get_db, init_db, TTSModel, Session as DBSession, Vote
 from tts_service import TTSService
-from elo import calculate_elo
+from elo import calculate_elo, calculate_elo_tie, calculate_elo_both_bad
 from openai import OpenAI
 import os
 
@@ -117,26 +117,35 @@ async def vote(request: VoteRequest, db: Session = Depends(get_db)):
     model_b = db.query(TTSModel).filter(TTSModel.id == db_session.model_b_id).first()
     
     if request.winner == "A":
-        winner, loser = model_a, model_b
+        new_a_elo, new_b_elo = calculate_elo(model_a.elo_rating, model_b.elo_rating)
+        model_a.wins += 1
+        model_b.losses += 1
+        winner_id, loser_id = model_a.id, model_b.id
     elif request.winner == "B":
-        winner, loser = model_b, model_a
+        new_b_elo, new_a_elo = calculate_elo(model_b.elo_rating, model_a.elo_rating)
+        model_b.wins += 1
+        model_a.losses += 1
+        winner_id, loser_id = model_b.id, model_a.id
+    elif request.winner == "tie":
+        new_a_elo, new_b_elo = calculate_elo_tie(model_a.elo_rating, model_b.elo_rating)
+        winner_id, loser_id = None, None
+    elif request.winner == "both_bad":
+        new_a_elo, new_b_elo = calculate_elo_both_bad(model_a.elo_rating, model_b.elo_rating)
+        model_a.losses += 1
+        model_b.losses += 1
+        winner_id, loser_id = None, None
     else:
         raise HTTPException(status_code=400, detail="Invalid winner selection")
     
-    new_winner_elo, new_loser_elo = calculate_elo(winner.elo_rating, loser.elo_rating)
-    
-    winner.elo_rating = new_winner_elo
-    winner.wins += 1
-    winner.total_votes += 1
-    
-    loser.elo_rating = new_loser_elo
-    loser.losses += 1
-    loser.total_votes += 1
+    model_a.elo_rating = new_a_elo
+    model_b.elo_rating = new_b_elo
+    model_a.total_votes += 1
+    model_b.total_votes += 1
     
     vote_record = Vote(
         session_id=db_session.id,
-        winner_model_id=winner.id,
-        loser_model_id=loser.id,
+        winner_model_id=winner_id,
+        loser_model_id=loser_id,
         prompt_number=conv["prompt_count"]
     )
     db.add(vote_record)
@@ -144,8 +153,8 @@ async def vote(request: VoteRequest, db: Session = Depends(get_db)):
     
     return {
         "message": "Vote recorded",
-        "winner_elo": new_winner_elo,
-        "loser_elo": new_loser_elo,
+        "winner_elo": new_a_elo,
+        "loser_elo": new_b_elo,
         "model_a_name": conv["model_a"],
         "model_a_provider": conv["model_a_provider"],
         "model_b_name": conv["model_b"],

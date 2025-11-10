@@ -33,13 +33,17 @@ body {
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--border);
-    transition: transform 0.3s ease;
+    transition: all 0.3s ease;
     position: relative;
     z-index: 100;
 }
 
 .sidebar.collapsed {
-    transform: translateX(-210px);
+    width: 60px;
+}
+
+.sidebar.collapsed .nav-item span {
+    display: none;
 }
 
 .sidebar-toggle {
@@ -497,6 +501,16 @@ header h1 {
 .vote-btn:hover {
     border-color: var(--primary);
     background: var(--surface-hover);
+}
+
+.voice-card.winner {
+    border: 2px solid var(--success);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+}
+
+.voice-card.loser {
+    border: 2px solid var(--danger);
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
 }
 
 .input-container {
