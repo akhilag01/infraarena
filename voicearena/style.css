@@ -277,6 +277,67 @@ header h1 {
     text-align: center;
 }
 
+.model-reveal-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    justify-content: center;
+}
+
+.model-logo-small {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border-radius: 50%;
+    padding: 0.25rem;
+    flex-shrink: 0;
+}
+
+.model-logo-small img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.model-info-inline {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+}
+
+.model-name-small {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.2;
+}
+
+.provider-name-small {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    line-height: 1.2;
+}
+
+.voice-card.revealed {
+    animation: revealPulse 0.5s ease;
+}
+
+@keyframes revealPulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.02);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
 .voice-controls {
     display: flex;
     align-items: center;

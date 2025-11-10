@@ -59,10 +59,11 @@ function addMessage(text, isUser, audioDataA = null, audioDataB = null) {
 function createVoiceCard(label, audioHex) {
     const card = document.createElement('div');
     card.className = 'voice-card';
+    card.dataset.label = label;
     
     const header = document.createElement('div');
     header.className = 'voice-card-header';
-    header.textContent = `Voice ${label}`;
+    header.innerHTML = `<span class="voice-label">Voice ${label}</span>`;
     
     const audioBytes = new Uint8Array(audioHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
     const audioBlob = new Blob([audioBytes], { type: 'audio/mpeg' });
@@ -181,7 +182,6 @@ async function startSession() {
         
         chatMessages.innerHTML = '';
         showScreen(chatScreen);
-        addMessage(data.message, false, 'System');
     } catch (error) {
         console.error('Error starting session:', error);
         alert('Failed to start session. Please try again.');
@@ -260,31 +260,36 @@ function getProviderLogo(provider) {
 }
 
 function showModelReveal(modelAName, modelAProvider, modelBName, modelBProvider) {
-    const revealDiv = document.createElement('div');
-    revealDiv.className = 'model-reveal';
-    
-    revealDiv.innerHTML = `
-        <div class="reveal-header">Model Reveal</div>
-        <div class="reveal-models">
-            <div class="reveal-model">
-                <div class="reveal-voice-label">Voice A</div>
-                <div class="reveal-logo">${getProviderLogo(modelAProvider)}</div>
-                <div class="reveal-model-name">${modelAName}</div>
-                <div class="reveal-provider">${modelAProvider}</div>
+    if (currentVoiceCards.voiceA && currentVoiceCards.voiceB) {
+        const headerA = currentVoiceCards.voiceA.querySelector('.voice-card-header');
+        const headerB = currentVoiceCards.voiceB.querySelector('.voice-card-header');
+        
+        const logoA = getProviderLogo(modelAProvider);
+        const logoB = getProviderLogo(modelBProvider);
+        
+        headerA.innerHTML = `
+            <div class="model-reveal-inline">
+                <div class="model-logo-small">${logoA}</div>
+                <div class="model-info-inline">
+                    <div class="model-name-small">${modelAName}</div>
+                    <div class="provider-name-small">${modelAProvider}</div>
+                </div>
             </div>
-            <div class="reveal-divider"></div>
-            <div class="reveal-model">
-                <div class="reveal-voice-label">Voice B</div>
-                <div class="reveal-logo">${getProviderLogo(modelBProvider)}</div>
-                <div class="reveal-model-name">${modelBName}</div>
-                <div class="reveal-provider">${modelBProvider}</div>
+        `;
+        
+        headerB.innerHTML = `
+            <div class="model-reveal-inline">
+                <div class="model-logo-small">${logoB}</div>
+                <div class="model-info-inline">
+                    <div class="model-name-small">${modelBName}</div>
+                    <div class="provider-name-small">${modelBProvider}</div>
+                </div>
             </div>
-        </div>
-        <div class="reveal-footer">Thank you for voting! Continue the conversation.</div>
-    `;
-    
-    chatMessages.appendChild(revealDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+        `;
+        
+        currentVoiceCards.voiceA.classList.add('revealed');
+        currentVoiceCards.voiceB.classList.add('revealed');
+    }
 }
 
 async function loadLeaderboard() {
