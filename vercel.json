@@ -1,23 +1,14 @@
 {
-  "version": 2,
   "builds": [
     {
       "src": "api/index.py",
       "use": "@vercel/python"
-    },
-    {
-      "src": "voicearena/*.{html,css,js,png,webp,svg}",
-      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/static/(.*)",
-      "dest": "/voicearena/$1"
-    },
-    {
       "src": "/(.*)",
-      "dest": "/api/index.py"
+      "dest": "api/index.py"
     }
   ]
 }

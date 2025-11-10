@@ -9,22 +9,28 @@ sys.path.insert(0, str(voicearena_path))
 # Set working directory for static files
 try:
     os.chdir(str(voicearena_path))
-except:
-    pass  # In serverless, cwd changes may not work
+except Exception as e:
+    print(f"Warning: Could not change directory: {e}")
 
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Header
-from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional
-import random
-import uuid
-import io
-
-from tts_service import TTSService
-from elo import calculate_elo, calculate_elo_tie, calculate_elo_both_bad
-from supabase_client import get_supabase, get_user_from_token
-from openai import OpenAI
+try:
+    from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Header
+    from fastapi.responses import FileResponse, HTMLResponse
+    from fastapi.middleware.cors import CORSMiddleware
+    from pydantic import BaseModel
+    from typing import Optional
+    import random
+    import uuid
+    import io
+    
+    from tts_service import TTSService
+    from elo import calculate_elo, calculate_elo_tie, calculate_elo_both_bad
+    from supabase_client import get_supabase, get_user_from_token
+    from openai import OpenAI
+except Exception as e:
+    print(f"IMPORT ERROR: {e}")
+    import traceback
+    traceback.print_exc()
+    raise
 
 # Initialize app
 app = FastAPI(title="Voice Arena")
