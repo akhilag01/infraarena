@@ -1,14 +1,14 @@
 {
   "builds": [
     {
-      "src": "api/wrapper.py",
+      "src": "api/simple.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "api/wrapper.py"
+      "dest": "api/simple.py"
     }
   ]
 }
