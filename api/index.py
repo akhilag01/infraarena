@@ -1,36 +1,146 @@
-import sys
 import os
-from pathlib import Path
+import random
+import uuid
+import io
+import httpx
+from typing import Optional
+from fastapi import FastAPI, HTTPException, UploadFile, File, Header
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from openai import OpenAI
+from elevenlabs import ElevenLabs
+from supabase import create_client, Client
 
-# Add voicearena directory to path
-voicearena_path = Path(__file__).parent.parent / 'voicearena'
-sys.path.insert(0, str(voicearena_path))
+# Initialize clients lazily
+_supabase_client = None
+_openai_client = None
+_elevenlabs_client = None
+_tts_service = None
 
-# Set working directory for static files
-try:
-    os.chdir(str(voicearena_path))
-except Exception as e:
-    print(f"Warning: Could not change directory: {e}")
+def get_supabase() -> Client:
+    global _supabase_client
+    if _supabase_client is None:
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
+        if not supabase_url or not supabase_key:
+            raise ValueError("Supabase credentials not set")
+        _supabase_client = create_client(supabase_url, supabase_key)
+    return _supabase_client
 
-try:
-    from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Header
-    from fastapi.responses import FileResponse, HTMLResponse
-    from fastapi.middleware.cors import CORSMiddleware
-    from pydantic import BaseModel
-    from typing import Optional
-    import random
-    import uuid
-    import io
+def get_openai_client():
+    global _openai_client
+    if _openai_client is None:
+        _openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    return _openai_client
+
+# ELO calculation functions
+def calculate_elo(winner_rating: float, loser_rating: float, k_factor: int = 32):
+    expected_winner = 1 / (1 + 10 ** ((loser_rating - winner_rating) / 400))
+    expected_loser = 1 / (1 + 10 ** ((winner_rating - loser_rating) / 400))
+    new_winner_rating = winner_rating + k_factor * (1 - expected_winner)
+    new_loser_rating = loser_rating + k_factor * (0 - expected_loser)
+    return new_winner_rating, new_loser_rating
+
+def calculate_elo_tie(rating_a: float, rating_b: float, k_factor: int = 32):
+    expected_a = 1 / (1 + 10 ** ((rating_b - rating_a) / 400))
+    expected_b = 1 / (1 + 10 ** ((rating_a - rating_b) / 400))
+    new_rating_a = rating_a + k_factor * (0.5 - expected_a)
+    new_rating_b = rating_b + k_factor * (0.5 - expected_b)
+    return new_rating_a, new_rating_b
+
+def calculate_elo_both_bad(rating_a: float, rating_b: float, k_factor: int = 32):
+    expected_a = 1 / (1 + 10 ** ((rating_b - rating_a) / 400))
+    expected_b = 1 / (1 + 10 ** ((rating_a - rating_b) / 400))
+    new_rating_a = rating_a + k_factor * (0 - expected_a)
+    new_rating_b = rating_b + k_factor * (0 - expected_b)
+    return new_rating_a, new_rating_b
+
+# TTS Service
+class TTSService:
+    def __init__(self):
+        self.deepgram_api_key = os.getenv("DEEPGRAM_API_KEY")
+        self.cartesia_api_key = os.getenv("CARTESIA_API_KEY")
     
-    from tts_service import TTSService
-    from elo import calculate_elo, calculate_elo_tie, calculate_elo_both_bad
-    from supabase_client import get_supabase, get_user_from_token
-    from openai import OpenAI
-except Exception as e:
-    print(f"IMPORT ERROR: {e}")
-    import traceback
-    traceback.print_exc()
-    raise
+    async def generate_speech(self, text: str, model_name: str) -> bytes:
+        if model_name == "tts-1":
+            return await self._openai_tts(text)
+        elif model_name in ["eleven_v3", "eleven_multilingual_v2"]:
+            return await self._elevenlabs_tts(text, model_name)
+        elif model_name == "aura-2-thalia-en":
+            return await self._deepgram_tts(text)
+        elif model_name == "sonic-3":
+            return await self._cartesia_tts(text)
+        else:
+            raise ValueError(f"Unknown model: {model_name}")
+    
+    async def _openai_tts(self, text: str) -> bytes:
+        client = get_openai_client()
+        response = client.audio.speech.create(
+            model="tts-1",
+            voice="nova",
+            input=text,
+            speed=1.0
+        )
+        return response.content
+    
+    async def _elevenlabs_tts(self, text: str, model: str) -> bytes:
+        global _elevenlabs_client
+        if _elevenlabs_client is None:
+            _elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+        
+        audio_generator = _elevenlabs_client.text_to_speech.convert(
+            text=text,
+            voice_id="EXAVITQu4vr4xnSDxMaL",
+            model_id="eleven_turbo_v2_5" if model == "eleven_v3" else model,
+            voice_settings={
+                "stability": 0.5,
+                "similarity_boost": 0.75,
+                "style": 0.0,
+                "use_speaker_boost": True
+            }
+        )
+        
+        audio_bytes = b""
+        for chunk in audio_generator:
+            audio_bytes += chunk
+        return audio_bytes
+    
+    async def _deepgram_tts(self, text: str) -> bytes:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.deepgram.com/v1/speak?model=aura-asteria-en",
+                headers={
+                    "Authorization": f"Token {self.deepgram_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={"text": text}
+            )
+            return response.content
+    
+    async def _cartesia_tts(self, text: str) -> bytes:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.cartesia.ai/tts/bytes",
+                headers={
+                    "X-API-Key": self.cartesia_api_key,
+                    "Cartesia-Version": "2024-06-10"
+                },
+                json={
+                    "model_id": "sonic-english",
+                    "transcript": text,
+                    "voice": {
+                        "mode": "id",
+                        "id": "156fb8d2-335b-4950-9cb3-a2d33befec77"
+                    },
+                    "output_format": {
+                        "container": "mp3",
+                        "encoding": "mp3",
+                        "sample_rate": 44100
+                    },
+                    "language": "en"
+                }
+            )
+            return response.content
 
 # Initialize app
 app = FastAPI(title="Voice Arena")
@@ -43,13 +153,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-tts_service = TTSService()
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# In-memory storage (Note: This will reset on each cold start in serverless)
+# In-memory storage
 conversation_store = {}
 models_cache = None
 
+# Request models
 class StartSessionRequest(BaseModel):
     pass
 
@@ -68,11 +176,7 @@ class AuthRequest(BaseModel):
 class AuthTokenRequest(BaseModel):
     token: str
 
-class GoogleAuthRequest(BaseModel):
-    id_token: str
-
 def get_models():
-    """Get TTS models from Supabase instead of SQLite"""
     global models_cache
     if models_cache is None:
         supabase = get_supabase()
@@ -80,6 +184,13 @@ def get_models():
         models_cache = response.data
     return models_cache
 
+def get_tts_service():
+    global _tts_service
+    if _tts_service is None:
+        _tts_service = TTSService()
+    return _tts_service
+
+@app.get("/")
 @app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -94,7 +205,6 @@ async def start_session():
     selected_models = random.sample(models, 2)
     session_id = str(uuid.uuid4())
     
-    # Store in Supabase
     supabase.table('sessions').insert({
         'session_id': session_id,
         'model_a_id': selected_models[0]['id'],
@@ -123,7 +233,6 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=404, detail="Session not found")
     
     conv = conversation_store[request.session_id]
-    
     models = get_models()
     if len(models) < 2:
         raise HTTPException(status_code=500, detail="Not enough TTS models available")
@@ -139,6 +248,7 @@ async def chat(request: ChatRequest):
     
     conv["messages"].append({"role": "user", "content": request.message})
     
+    openai_client = get_openai_client()
     response = openai_client.chat.completions.create(
         model="gpt-4",
         messages=conv["messages"]
@@ -147,6 +257,7 @@ async def chat(request: ChatRequest):
     assistant_message = response.choices[0].message.content
     conv["messages"].append({"role": "assistant", "content": assistant_message})
     
+    tts_service = get_tts_service()
     audio_a = await tts_service.generate_speech(assistant_message, conv["model_a"])
     audio_b = await tts_service.generate_speech(assistant_message, conv["model_b"])
     
@@ -168,7 +279,6 @@ async def vote(request: VoteRequest):
     
     conv = conversation_store[request.session_id]
     
-    # Get current ELO ratings from Supabase
     model_a_data = supabase.table('tts_models').select('*').eq('id', conv["model_a_id"]).single().execute()
     model_b_data = supabase.table('tts_models').select('*').eq('id', conv["model_b_id"]).single().execute()
     
@@ -196,7 +306,6 @@ async def vote(request: VoteRequest):
     else:
         raise HTTPException(status_code=400, detail="Invalid winner selection")
     
-    # Update ELO ratings
     supabase.table('tts_models').update({
         'elo_rating': new_a_elo,
         'total_votes': model_a['total_votes'] + 1
@@ -207,7 +316,6 @@ async def vote(request: VoteRequest):
         'total_votes': model_b['total_votes'] + 1
     }).eq('id', model_b['id']).execute()
     
-    # Store vote
     session_data = supabase.table('sessions').select('id').eq('session_id', request.session_id).single().execute()
     supabase.table('votes').insert({
         'session_id': session_data.data['id'],
@@ -258,6 +366,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
         audio_file = io.BytesIO(audio_data)
         audio_file.name = "audio.webm"
         
+        openai_client = get_openai_client()
         transcript = openai_client.audio.transcriptions.create(
             model="whisper-1",
             file=audio_file
@@ -267,7 +376,6 @@ async def transcribe_audio(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Auth endpoints
 @app.post("/api/auth/signup")
 async def signup(auth_request: AuthRequest):
     supabase = get_supabase()
@@ -315,11 +423,12 @@ async def google_auth():
 
 @app.post("/api/auth/verify")
 async def verify_token(token_request: AuthTokenRequest):
+    supabase = get_supabase()
     try:
-        user = get_user_from_token(token_request.token)
+        user = supabase.auth.get_user(token_request.token)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid token")
-        return {"user": user}
+        return {"user": user.user}
     except Exception as e:
         raise HTTPException(status_code=401, detail=str(e))
 
@@ -335,20 +444,3 @@ async def logout(authorization: str = Header(None)):
         return {"message": "Logged out successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-# Serve static files
-@app.get("/static/{file_path:path}")
-async def serve_static(file_path: str):
-    file_location = Path(voicearena_path) / file_path
-    if file_location.exists():
-        return FileResponse(file_location)
-    raise HTTPException(status_code=404, detail="File not found")
-
-@app.get("/")
-async def read_root():
-    index_path = Path(voicearena_path) / "index.html"
-    return FileResponse(index_path)
-
-# Export for Vercel using Mangum
-from mangum import Mangum
-handler = Mangum(app, lifespan="off")

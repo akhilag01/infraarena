@@ -1,5 +1,4 @@
 fastapi
-mangum
 python-dotenv
 openai
 elevenlabs
