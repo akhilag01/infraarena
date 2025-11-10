@@ -409,3 +409,41 @@ document.querySelectorAll('.vote-btn').forEach(btn => {
         submitVote(winner);
     });
 });
+
+const sidebar = document.getElementById('sidebar');
+const sidebarToggle = document.getElementById('sidebar-toggle');
+const navHome = document.getElementById('nav-home');
+const navChat = document.getElementById('nav-chat');
+const navLeaderboard = document.getElementById('nav-leaderboard');
+
+sidebarToggle.addEventListener('click', () => {
+    sidebar.classList.toggle('collapsed');
+});
+
+navHome.addEventListener('click', () => {
+    showScreen(startScreen);
+    updateActiveNav(navHome);
+});
+
+navChat.addEventListener('click', () => {
+    if (sessionId) {
+        showScreen(chatScreen);
+        updateActiveNav(navChat);
+    } else {
+        alert('Please start a conversation first');
+    }
+});
+
+navLeaderboard.addEventListener('click', () => {
+    loadLeaderboard();
+    updateActiveNav(navLeaderboard);
+});
+
+function updateActiveNav(activeItem) {
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    activeItem.classList.add('active');
+}
+
+updateActiveNav(navHome);
