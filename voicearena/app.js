@@ -450,9 +450,7 @@ function stopVoiceRecording() {
     }
 }
 
-startBtn.addEventListener('click', startSession);
-leaderboardBtn.addEventListener('click', loadLeaderboard);
-backBtn.addEventListener('click', () => showScreen(startScreen));
+backBtn.addEventListener('click', () => showScreen(chatScreen));
 
 sendBtn.addEventListener('click', () => {
     const message = messageInput.value;
