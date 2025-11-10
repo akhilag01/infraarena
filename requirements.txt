@@ -1,7 +1,5 @@
 fastapi
-uvicorn[standard]
-sqlalchemy
-alembic
+mangum
 python-dotenv
 openai
 elevenlabs
@@ -9,7 +7,6 @@ deepgram-sdk
 cartesia
 pydantic
 httpx
-websockets
 python-multipart
 supabase
 gotrue

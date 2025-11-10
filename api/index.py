@@ -6,8 +6,11 @@ from pathlib import Path
 voicearena_path = Path(__file__).parent.parent / 'voicearena'
 sys.path.insert(0, str(voicearena_path))
 
-# Change working directory to voicearena so static files work
-os.chdir(str(voicearena_path))
+# Set working directory for static files
+try:
+    os.chdir(str(voicearena_path))
+except:
+    pass  # In serverless, cwd changes may not work
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Header
 from fastapi.responses import FileResponse, HTMLResponse
@@ -332,5 +335,6 @@ async def read_root():
     index_path = Path(voicearena_path) / "index.html"
     return FileResponse(index_path)
 
-# Export for Vercel
-handler = app
+# Export for Vercel using Mangum
+from mangum import Mangum
+handler = Mangum(app, lifespan="off")
