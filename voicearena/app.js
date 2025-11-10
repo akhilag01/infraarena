@@ -2,12 +2,11 @@ let sessionId = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
+let currentUser = null;
+let authToken = null;
 
-const startScreen = document.getElementById('start-screen');
 const chatScreen = document.getElementById('chat-screen');
 const leaderboardScreen = document.getElementById('leaderboard-screen');
-const startBtn = document.getElementById('start-btn');
-const leaderboardBtn = document.getElementById('leaderboard-btn');
 const backBtn = document.getElementById('back-btn');
 const messageInput = document.getElementById('message-input');
 const sendBtn = document.getElementById('send-btn');
@@ -15,8 +14,20 @@ const voiceBtn = document.getElementById('voice-btn');
 const chatMessages = document.getElementById('chat-messages');
 const votePrompt = document.getElementById('vote-prompt');
 
+const loginBtn = document.getElementById('login-btn');
+const loginModal = document.getElementById('login-modal');
+const modalClose = document.getElementById('modal-close');
+const userProfile = document.getElementById('user-profile');
+const userEmail = document.getElementById('user-email');
+const logoutBtn = document.getElementById('logout-btn');
+const emailLoginBtn = document.getElementById('email-login-btn');
+const emailSignupBtn = document.getElementById('email-signup-btn');
+const googleLoginBtn = document.getElementById('google-login-btn');
+const emailInput = document.getElementById('email-input');
+const passwordInput = document.getElementById('password-input');
+
 function showScreen(screen) {
-    [startScreen, chatScreen, leaderboardScreen].forEach(s => s.classList.remove('active'));
+    [chatScreen, leaderboardScreen].forEach(s => s.classList.remove('active'));
     screen.classList.add('active');
 }
 
@@ -54,6 +65,37 @@ function addMessage(text, isUser, audioDataA = null, audioDataB = null) {
     
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+    return messageDiv;
+}
+
+function addGeneratingPlaceholder(text) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message assistant';
+    
+    const textDiv = document.createElement('div');
+    textDiv.className = 'message-text';
+    textDiv.textContent = text;
+    messageDiv.appendChild(textDiv);
+    
+    const voicesContainer = document.createElement('div');
+    voicesContainer.className = 'voices-container';
+    
+    const voiceA = document.createElement('div');
+    voiceA.className = 'voice-card generating';
+    voiceA.innerHTML = '<div class="voice-card-header"><span class="voice-label">Voice A</span></div><div class="voice-controls"></div>';
+    
+    const voiceB = document.createElement('div');
+    voiceB.className = 'voice-card generating';
+    voiceB.innerHTML = '<div class="voice-card-header"><span class="voice-label">Voice B</span></div><div class="voice-controls"></div>';
+    
+    voicesContainer.appendChild(voiceA);
+    voicesContainer.appendChild(voiceB);
+    messageDiv.appendChild(voicesContainer);
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    return messageDiv;
 }
 
 function createVoiceCard(label, audioHex) {
@@ -194,6 +236,8 @@ async function sendMessage(message) {
     addMessage(message, true);
     messageInput.value = '';
     
+    const placeholder = addGeneratingPlaceholder('Generating response...');
+    
     try {
         const response = await fetch('/api/chat', {
             method: 'POST',
@@ -203,6 +247,8 @@ async function sendMessage(message) {
         
         const data = await response.json();
         
+        placeholder.remove();
+        
         addMessage(data.text, false, data.audio_a, data.audio_b);
         
         if (data.should_vote) {
@@ -210,6 +256,7 @@ async function sendMessage(message) {
         }
     } catch (error) {
         console.error('Error sending message:', error);
+        placeholder.remove();
         addMessage('Sorry, there was an error. Please try again.', false);
     }
 }
@@ -436,7 +483,6 @@ document.querySelectorAll('.vote-btn').forEach(btn => {
 
 const sidebar = document.getElementById('sidebar');
 const sidebarToggle = document.getElementById('sidebar-toggle');
-const navHome = document.getElementById('nav-home');
 const navChat = document.getElementById('nav-chat');
 const navLeaderboard = document.getElementById('nav-leaderboard');
 
@@ -444,18 +490,9 @@ sidebarToggle.addEventListener('click', () => {
     sidebar.classList.toggle('collapsed');
 });
 
-navHome.addEventListener('click', () => {
-    showScreen(startScreen);
-    updateActiveNav(navHome);
-});
-
 navChat.addEventListener('click', () => {
-    if (sessionId) {
-        showScreen(chatScreen);
-        updateActiveNav(navChat);
-    } else {
-        alert('Please start a conversation first');
-    }
+    showScreen(chatScreen);
+    updateActiveNav(navChat);
 });
 
 navLeaderboard.addEventListener('click', () => {
@@ -468,6 +505,148 @@ function updateActiveNav(activeItem) {
         item.classList.remove('active');
     });
     activeItem.classList.add('active');
+}
+
+// Authentication functions
+function updateUIForUser(user) {
+    currentUser = user;
+    if (user) {
+        loginBtn.classList.add('hidden');
+        userProfile.classList.remove('hidden');
+        userEmail.textContent = user.email;
+    } else {
+        loginBtn.classList.remove('hidden');
+        userProfile.classList.add('hidden');
+        currentUser = null;
+        authToken = null;
+    }
+}
+
+loginBtn.addEventListener('click', () => {
+    loginModal.classList.remove('hidden');
+});
+
+modalClose.addEventListener('click', () => {
+    loginModal.classList.add('hidden');
+});
+
+loginModal.addEventListener('click', (e) => {
+    if (e.target === loginModal) {
+        loginModal.classList.add('hidden');
+    }
+});
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`${tab}-tab`).classList.add('active');
+    });
+});
+
+emailLoginBtn.addEventListener('click', async () => {
+    try {
+        const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: emailInput.value,
+                password: passwordInput.value
+            })
+        });
+        
+        const data = await response.json();
+        if (response.ok) {
+            authToken = data.access_token;
+            localStorage.setItem('authToken', authToken);
+            updateUIForUser(data.user);
+            loginModal.classList.add('hidden');
+        } else {
+            alert(data.detail || 'Login failed');
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        alert('Login failed. Please try again.');
+    }
+});
+
+emailSignupBtn.addEventListener('click', async () => {
+    try {
+        const response = await fetch('/api/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: emailInput.value,
+                password: passwordInput.value
+            })
+        });
+        
+        const data = await response.json();
+        if (response.ok) {
+            alert('Signup successful! Please login.');
+        } else {
+            alert(data.detail || 'Signup failed');
+        }
+    } catch (error) {
+        console.error('Signup error:', error);
+        alert('Signup failed. Please try again.');
+    }
+});
+
+googleLoginBtn.addEventListener('click', async () => {
+    try {
+        const response = await fetch('/api/auth/google', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        if (data.url) {
+            window.location.href = data.url;
+        }
+    } catch (error) {
+        console.error('Google auth error:', error);
+        alert('Google authentication failed');
+    }
+});
+
+logoutBtn.addEventListener('click', async () => {
+    try {
+        if (authToken) {
+            await fetch('/api/auth/logout', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+        }
+        localStorage.removeItem('authToken');
+        updateUIForUser(null);
+    } catch (error) {
+        console.error('Logout error:', error);
+    }
+});
+
+// Check for existing auth token on load
+const storedToken = localStorage.getItem('authToken');
+if (storedToken) {
+    fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: storedToken })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.user) {
+            authToken = storedToken;
+            updateUIForUser(data.user);
+        } else {
+            localStorage.removeItem('authToken');
+        }
+    })
+    .catch(() => {
+        localStorage.removeItem('authToken');
+    });
 }
 
 startSession();
