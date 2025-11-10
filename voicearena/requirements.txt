@@ -11,3 +11,5 @@ pydantic
 httpx
 websockets
 python-multipart
+supabase
+gotrue

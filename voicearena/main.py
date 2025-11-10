@@ -1,6 +1,7 @@
-from fastapi import FastAPI, Depends, HTTPException, WebSocket, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, WebSocket, UploadFile, File, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -12,10 +13,20 @@ import io
 from database import get_db, init_db, TTSModel, Session as DBSession, Vote
 from tts_service import TTSService
 from elo import calculate_elo, calculate_elo_tie, calculate_elo_both_bad
+from supabase_client import supabase, get_user_from_token
 from openai import OpenAI
 import os
 
 app = FastAPI(title="Voice Arena")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 tts_service = TTSService()
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -31,6 +42,16 @@ class ChatRequest(BaseModel):
 class VoteRequest(BaseModel):
     session_id: str
     winner: str
+
+class AuthRequest(BaseModel):
+    email: str
+    password: str
+
+class AuthTokenRequest(BaseModel):
+    token: str
+
+class GoogleAuthRequest(BaseModel):
+    id_token: str
 
 @app.on_event("startup")
 async def startup_event():
@@ -199,3 +220,81 @@ app.mount("/static", StaticFiles(directory="."), name="static")
 @app.get("/")
 async def read_root():
     return FileResponse("index.html")
+
+# Helper function to get current user from Authorization header
+async def get_current_user(authorization: Optional[str] = Header(None)):
+    if not authorization:
+        return None
+    
+    try:
+        token = authorization.replace("Bearer ", "")
+        user = get_user_from_token(token)
+        return user
+    except Exception as e:
+        print(f"Error getting current user: {e}")
+        return None
+
+# Authentication endpoints
+@app.post("/api/auth/signup")
+async def signup(auth_request: AuthRequest):
+    try:
+        response = supabase.auth.sign_up({
+            "email": auth_request.email,
+            "password": auth_request.password
+        })
+        return {
+            "user": response.user,
+            "session": response.session
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/auth/login")
+async def login(auth_request: AuthRequest):
+    try:
+        response = supabase.auth.sign_in_with_password({
+            "email": auth_request.email,
+            "password": auth_request.password
+        })
+        return {
+            "user": response.user,
+            "session": response.session,
+            "access_token": response.session.access_token
+        }
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+@app.post("/api/auth/google")
+async def google_auth():
+    try:
+        response = supabase.auth.sign_in_with_oauth({
+            "provider": "google",
+            "options": {
+                "redirect_to": "http://localhost:8000"
+            }
+        })
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/auth/verify")
+async def verify_token(token_request: AuthTokenRequest):
+    try:
+        user = get_user_from_token(token_request.token)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return {"user": user}
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+@app.post("/api/auth/logout")
+async def logout(authorization: str = Header(None)):
+    try:
+        if not authorization:
+            raise HTTPException(status_code=401, detail="No authorization header")
+        
+        token = authorization.replace("Bearer ", "")
+        supabase.auth.sign_out()
+        return {"message": "Logged out successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
