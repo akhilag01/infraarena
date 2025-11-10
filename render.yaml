@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: infrafield
+    runtime: python
+    buildCommand: pip install -r voicearena/requirements.txt
+    startCommand: cd voicearena && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: CARTESIA_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false

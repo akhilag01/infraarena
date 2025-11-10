@@ -23,7 +23,7 @@ import io
 
 from tts_service import TTSService
 from elo import calculate_elo, calculate_elo_tie, calculate_elo_both_bad
-from supabase_client import supabase, get_user_from_token
+from supabase_client import get_supabase, get_user_from_token
 from openai import OpenAI
 
 # Initialize app
@@ -69,6 +69,7 @@ def get_models():
     """Get TTS models from Supabase instead of SQLite"""
     global models_cache
     if models_cache is None:
+        supabase = get_supabase()
         response = supabase.table('tts_models').select('*').execute()
         models_cache = response.data
     return models_cache
@@ -79,6 +80,7 @@ async def health():
 
 @app.post("/api/start-session")
 async def start_session():
+    supabase = get_supabase()
     models = get_models()
     if len(models) < 2:
         raise HTTPException(status_code=500, detail="Not enough TTS models available")
@@ -154,6 +156,7 @@ async def chat(request: ChatRequest):
 
 @app.post("/api/vote")
 async def vote(request: VoteRequest):
+    supabase = get_supabase()
     if request.session_id not in conversation_store:
         raise HTTPException(status_code=404, detail="Session not found")
     
@@ -226,6 +229,7 @@ async def vote(request: VoteRequest):
 
 @app.get("/api/leaderboard")
 async def get_leaderboard():
+    supabase = get_supabase()
     response = supabase.table('tts_models').select('*').order('elo_rating', desc=True).execute()
     models = response.data
     
@@ -260,6 +264,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
 # Auth endpoints
 @app.post("/api/auth/signup")
 async def signup(auth_request: AuthRequest):
+    supabase = get_supabase()
     try:
         response = supabase.auth.sign_up({
             "email": auth_request.email,
@@ -274,6 +279,7 @@ async def signup(auth_request: AuthRequest):
 
 @app.post("/api/auth/login")
 async def login(auth_request: AuthRequest):
+    supabase = get_supabase()
     try:
         response = supabase.auth.sign_in_with_password({
             "email": auth_request.email,
@@ -289,6 +295,7 @@ async def login(auth_request: AuthRequest):
 
 @app.post("/api/auth/google")
 async def google_auth():
+    supabase = get_supabase()
     try:
         response = supabase.auth.sign_in_with_oauth({
             "provider": "google",
@@ -312,6 +319,7 @@ async def verify_token(token_request: AuthTokenRequest):
 
 @app.post("/api/auth/logout")
 async def logout(authorization: str = Header(None)):
+    supabase = get_supabase()
     try:
         if not authorization:
             raise HTTPException(status_code=401, detail="No authorization header")
