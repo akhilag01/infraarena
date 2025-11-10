@@ -1,15 +1,69 @@
 import os
+import sys
 import random
 import uuid
 import io
-import httpx
-from typing import Optional
-from fastapi import FastAPI, HTTPException, UploadFile, File, Header
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from openai import OpenAI
-from elevenlabs import ElevenLabs
-from supabase import create_client, Client
+import traceback
+
+print("=== STARTING IMPORT ===", file=sys.stderr)
+print(f"Python version: {sys.version}", file=sys.stderr)
+print(f"Working directory: {os.getcwd()}", file=sys.stderr)
+
+try:
+    import httpx
+    print("✓ httpx imported", file=sys.stderr)
+except Exception as e:
+    print(f"✗ httpx import failed: {e}", file=sys.stderr)
+    traceback.print_exc()
+
+try:
+    from typing import Optional
+    print("✓ typing imported", file=sys.stderr)
+except Exception as e:
+    print(f"✗ typing import failed: {e}", file=sys.stderr)
+
+try:
+    from fastapi import FastAPI, HTTPException, UploadFile, File, Header
+    print("✓ FastAPI imported", file=sys.stderr)
+except Exception as e:
+    print(f"✗ FastAPI import failed: {e}", file=sys.stderr)
+    traceback.print_exc()
+    raise
+
+try:
+    from fastapi.middleware.cors import CORSMiddleware
+    print("✓ CORS imported", file=sys.stderr)
+except Exception as e:
+    print(f"✗ CORS import failed: {e}", file=sys.stderr)
+
+try:
+    from pydantic import BaseModel
+    print("✓ Pydantic imported", file=sys.stderr)
+except Exception as e:
+    print(f"✗ Pydantic import failed: {e}", file=sys.stderr)
+
+try:
+    from openai import OpenAI
+    print("✓ OpenAI imported", file=sys.stderr)
+except Exception as e:
+    print(f"✗ OpenAI import failed: {e}", file=sys.stderr)
+    traceback.print_exc()
+
+try:
+    from elevenlabs import ElevenLabs
+    print("✓ ElevenLabs imported", file=sys.stderr)
+except Exception as e:
+    print(f"✗ ElevenLabs import failed: {e}", file=sys.stderr)
+    traceback.print_exc()
+
+try:
+    from supabase import create_client, Client
+    print("✓ Supabase imported", file=sys.stderr)
+except Exception as e:
+    print(f"✗ Supabase import failed: {e}", file=sys.stderr)
+    traceback.print_exc()
+
+print("=== ALL IMPORTS COMPLETED ===", file=sys.stderr)
 
 # Initialize clients lazily
 _supabase_client = None
@@ -445,5 +499,13 @@ async def logout(authorization: str = Header(None)):
         raise HTTPException(status_code=400, detail=str(e))
 
 # Export for Vercel
-from mangum import Mangum
-handler = Mangum(app, lifespan="off")
+try:
+    print("=== CREATING MANGUM HANDLER ===", file=sys.stderr)
+    from mangum import Mangum
+    print("✓ Mangum imported", file=sys.stderr)
+    handler = Mangum(app, lifespan="off")
+    print("✓ Handler created successfully", file=sys.stderr)
+except Exception as e:
+    print(f"✗ Mangum handler creation failed: {e}", file=sys.stderr)
+    traceback.print_exc()
+    raise
