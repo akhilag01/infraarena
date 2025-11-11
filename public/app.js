@@ -209,8 +209,8 @@ function hideVotePrompt() {
     votePrompt.classList.add('hidden');
 }
 
-async function startSession() {
-    if (sessionId) {
+async function startSession(force = false) {
+    if (sessionId && !force) {
         return;
     }
     
@@ -539,7 +539,7 @@ function startNewChat() {
         chatMessages.innerHTML = '';
         votePrompt.classList.add('hidden');
         
-        startSession();
+        startSession(true);
         showScreen(chatScreen);
         updateActiveNav(navChat);
     }
