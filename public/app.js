@@ -298,10 +298,10 @@ async function submitVote(winner) {
 
 function getProviderLogo(provider) {
     const logos = {
-        'ElevenLabs': '<img src="/static/logos/ElevenLabs_logo.png" alt="ElevenLabs">',
-        'OpenAI': '<img src="/static/logos/openai-icon.webp" alt="OpenAI">',
-        'Deepgram': '<img src="/static/logos/Deepgram-wordmark-black.png" alt="Deepgram">',
-        'Cartesia': '<img src="/static/logos/cartesia-logo.svg" alt="Cartesia">'
+        'ElevenLabs': '<img src="/logos/ElevenLabs_logo.png" alt="ElevenLabs">',
+        'OpenAI': '<img src="/logos/openai-icon.webp" alt="OpenAI">',
+        'Deepgram': '<img src="/logos/Deepgram-wordmark-black.png" alt="Deepgram">',
+        'Cartesia': '<img src="/logos/cartesia-logo.svg" alt="Cartesia">'
     };
     return logos[provider] || '';
 }
