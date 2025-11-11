@@ -766,6 +766,77 @@ header h1 {
     overflow-y: auto;
 }
 
+/* History Styles */
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.history-content {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.history-item {
+    background: var(--surface);
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.history-item:hover {
+    background: var(--surface-hover);
+    transform: translateX(4px);
+}
+
+.history-item-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.history-item-title {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-item-date {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.history-item-delete {
+    padding: 0.5rem;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+    margin-left: 0.5rem;
+}
+
+.history-item-delete:hover {
+    background: var(--danger);
+    color: white;
+}
+
+.empty-state {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 3rem 1rem;
+    font-size: 1.1rem;
+}
+
 .leaderboard-item {
     background: var(--surface);
     padding: 1.5rem;

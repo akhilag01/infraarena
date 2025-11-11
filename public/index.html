@@ -14,11 +14,17 @@
             </svg>
         </button>
         <nav class="sidebar-nav">
-            <button class="nav-item" id="nav-chat">
+            <button class="nav-item active" id="nav-chat">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M6 2a2 2 0 00-2 2v9a2 2 0 002 2h8l4 4V4a2 2 0 00-2-2H6z"/>
                 </svg>
-                <span>Chat</span>
+                <span>New Chat</span>
+            </button>
+            <button class="nav-item" id="nav-history">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 3a7 7 0 00-7 7h2a5 5 0 115 5v-2l-3 3 3 3v-2a7 7 0 000-14z"/>
+                </svg>
+                <span>History</span>
             </button>
             <button class="nav-item" id="nav-leaderboard">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
@@ -103,6 +109,16 @@
                             <path d="M11 21V23H13V21H11Z" fill="currentColor"/>
                         </svg>
                     </button>
+                </div>
+            </div>
+
+            <div id="history-screen" class="screen">
+                <div class="history-header">
+                    <h2>Chat History</h2>
+                    <button id="back-from-history-btn" class="secondary-btn">Back</button>
+                </div>
+                <div id="history-content" class="history-content">
+                    <p class="empty-state">No chat history yet. Start a conversation to see it here!</p>
                 </div>
             </div>
 

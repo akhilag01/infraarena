@@ -192,7 +192,7 @@ async def health():
     return {"status": "ok"}
 
 @app.post("/api/start-session")
-async def start_session():
+async def start_session(authorization: str = Header(None)):
     supabase = get_supabase()
     models = get_models()
     if len(models) < 2:
@@ -201,12 +201,25 @@ async def start_session():
     selected_models = random.sample(models, 2)
     session_id = str(uuid.uuid4())
     
+    # Get user ID from token if authenticated
+    user_id = None
+    if authorization:
+        token = authorization.replace("Bearer ", "")
+        try:
+            response = supabase.auth.get_user(token)
+            if response and response.user:
+                user_id = response.user.id
+        except:
+            pass
+    
     supabase.table('sessions').insert({
         'session_id': session_id,
         'model_a_id': selected_models[0]['id'],
         'model_b_id': selected_models[1]['id'],
         'messages': [],
-        'prompt_count': 0
+        'prompt_count': 0,
+        'user_id': user_id,
+        'title': 'New Chat'
     }).execute()
     
     return {
@@ -482,6 +495,78 @@ async def verify_token(token_request: AuthTokenRequest):
     except Exception as e:
         print(f"Error verifying token: {e}")
         raise HTTPException(status_code=401, detail=str(e))
+
+@app.get("/api/chat-history")
+async def get_chat_history(authorization: str = Header(None)):
+    supabase = get_supabase()
+    
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    token = authorization.replace("Bearer ", "")
+    try:
+        response = supabase.auth.get_user(token)
+        if not response or not response.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        user_id = response.user.id
+        
+        # Get user's chat sessions
+        sessions = supabase.table('sessions').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
+        
+        return {"sessions": sessions.data}
+    except Exception as e:
+        print(f"Error fetching chat history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chat-session/{session_id}")
+async def get_chat_session(session_id: str, authorization: str = Header(None)):
+    supabase = get_supabase()
+    
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    token = authorization.replace("Bearer ", "")
+    try:
+        response = supabase.auth.get_user(token)
+        if not response or not response.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        user_id = response.user.id
+        
+        # Get session - ensure it belongs to the user
+        session_data = supabase.table('sessions').select('*').eq('session_id', session_id).eq('user_id', user_id).single().execute()
+        
+        if not session_data.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        return session_data.data
+    except Exception as e:
+        print(f"Error fetching chat session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/chat-session/{session_id}")
+async def delete_chat_session(session_id: str, authorization: str = Header(None)):
+    supabase = get_supabase()
+    
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    token = authorization.replace("Bearer ", "")
+    try:
+        response = supabase.auth.get_user(token)
+        if not response or not response.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        user_id = response.user.id
+        
+        # Delete session - ensure it belongs to the user
+        supabase.table('sessions').delete().eq('session_id', session_id).eq('user_id', user_id).execute()
+        
+        return {"message": "Session deleted successfully"}
+    except Exception as e:
+        print(f"Error deleting chat session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/auth/logout")
 async def logout(authorization: str = Header(None)):
