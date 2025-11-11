@@ -224,9 +224,13 @@ async def start_session(authorization: str = Header(None)):
             'title': 'New Chat'
         }
         
-        supabase.table('sessions').insert(session_data).execute()
+        print(f"Creating session with data: {session_data}")
+        result = supabase.table('sessions').insert(session_data).execute()
+        print(f"Session created successfully: {result.data}")
     except Exception as e:
         print(f"Error creating session: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to create session: {str(e)}")
     
     return {
