@@ -6,8 +6,8 @@ TOutput = TypeVar("TOutput")
 
 
 class VoteOutcome(Enum):
-    LEFT = "left"
-    RIGHT = "right"
+    A = "A"
+    B = "B"
     TIE = "tie"
     BOTH_BAD = "both_bad"
 

@@ -63,6 +63,14 @@ except Exception as e:
     print(f"✗ Supabase import failed: {e}", file=sys.stderr)
     traceback.print_exc()
 
+try:
+    from arena.arena_base import VoteOutcome
+    from arena.elo import calculate_elo_from_vote
+    print("✓ Arena imports imported", file=sys.stderr)
+except Exception as e:
+    print(f"✗ Arena imports failed: {e}", file=sys.stderr)
+    traceback.print_exc()
+
 print("=== ALL IMPORTS COMPLETED ===", file=sys.stderr)
 
 # Initialize clients lazily
@@ -86,28 +94,6 @@ def get_openai_client():
     if _openai_client is None:
         _openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _openai_client
-
-# ELO calculation functions
-def calculate_elo(winner_rating: float, loser_rating: float, k_factor: int = 32):
-    expected_winner = 1 / (1 + 10 ** ((loser_rating - winner_rating) / 400))
-    expected_loser = 1 / (1 + 10 ** ((winner_rating - loser_rating) / 400))
-    new_winner_rating = winner_rating + k_factor * (1 - expected_winner)
-    new_loser_rating = loser_rating + k_factor * (0 - expected_loser)
-    return new_winner_rating, new_loser_rating
-
-def calculate_elo_tie(rating_a: float, rating_b: float, k_factor: int = 32):
-    expected_a = 1 / (1 + 10 ** ((rating_b - rating_a) / 400))
-    expected_b = 1 / (1 + 10 ** ((rating_a - rating_b) / 400))
-    new_rating_a = rating_a + k_factor * (0.5 - expected_a)
-    new_rating_b = rating_b + k_factor * (0.5 - expected_b)
-    return new_rating_a, new_rating_b
-
-def calculate_elo_both_bad(rating_a: float, rating_b: float, k_factor: int = 32):
-    expected_a = 1 / (1 + 10 ** ((rating_b - rating_a) / 400))
-    expected_b = 1 / (1 + 10 ** ((rating_a - rating_b) / 400))
-    new_rating_a = rating_a + k_factor * (0 - expected_a)
-    new_rating_b = rating_b + k_factor * (0 - expected_b)
-    return new_rating_a, new_rating_b
 
 # TTS Service
 class TTSService:
@@ -221,7 +207,7 @@ class ChatRequest(BaseModel):
 
 class VoteRequest(BaseModel):
     session_id: str
-    winner: str
+    winner: VoteOutcome
 
 class AuthRequest(BaseModel):
     email: str
@@ -337,27 +323,29 @@ async def vote(request: VoteRequest):
     
     model_a = model_a_data.data
     model_b = model_b_data.data
-    
-    if request.winner == "A":
-        new_a_elo, new_b_elo = calculate_elo(model_a['elo_rating'], model_b['elo_rating'])
+
+    # Calculate new ELO ratings using the helper function
+    new_a_elo, new_b_elo = calculate_elo_from_vote(
+        request.winner,
+        model_a['elo_rating'],
+        model_b['elo_rating']
+    )
+
+    # Update wins/losses based on vote outcome
+    if request.winner == VoteOutcome.A:
         winner_id, loser_id = model_a['id'], model_b['id']
         supabase.table('tts_models').update({'wins': model_a['wins'] + 1}).eq('id', model_a['id']).execute()
         supabase.table('tts_models').update({'losses': model_b['losses'] + 1}).eq('id', model_b['id']).execute()
-    elif request.winner == "B":
-        new_b_elo, new_a_elo = calculate_elo(model_b['elo_rating'], model_a['elo_rating'])
+    elif request.winner == VoteOutcome.B:
         winner_id, loser_id = model_b['id'], model_a['id']
         supabase.table('tts_models').update({'wins': model_b['wins'] + 1}).eq('id', model_b['id']).execute()
         supabase.table('tts_models').update({'losses': model_a['losses'] + 1}).eq('id', model_a['id']).execute()
-    elif request.winner == "tie":
-        new_a_elo, new_b_elo = calculate_elo_tie(model_a['elo_rating'], model_b['elo_rating'])
+    elif request.winner == VoteOutcome.TIE:
         winner_id, loser_id = None, None
-    elif request.winner == "both_bad":
-        new_a_elo, new_b_elo = calculate_elo_both_bad(model_a['elo_rating'], model_b['elo_rating'])
+    elif request.winner == VoteOutcome.BOTH_BAD:
         winner_id, loser_id = None, None
         supabase.table('tts_models').update({'losses': model_a['losses'] + 1}).eq('id', model_a['id']).execute()
         supabase.table('tts_models').update({'losses': model_b['losses'] + 1}).eq('id', model_b['id']).execute()
-    else:
-        raise HTTPException(status_code=400, detail="Invalid winner selection")
     
     supabase.table('tts_models').update({
         'elo_rating': new_a_elo,
@@ -374,7 +362,7 @@ async def vote(request: VoteRequest):
         'session_id': session_data.data['id'],
         'winner_model_id': winner_id,
         'loser_model_id': loser_id,
-        'vote_type': request.winner,
+        'vote_type': request.winner.value,
         'model_a_id': model_a['id'],
         'model_b_id': model_b['id'],
         'model_a_elo_before': model_a['elo_rating'],
