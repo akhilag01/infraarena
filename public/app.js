@@ -541,6 +541,8 @@ function updateActiveNav(activeItem) {
 // Authentication functions
 function updateUIForUser(user) {
     currentUser = user;
+    const userAvatar = document.getElementById('user-avatar');
+    
     if (user) {
         loginBtn.classList.add('hidden');
         headerLoginBtn.classList.add('hidden');
@@ -548,6 +550,12 @@ function updateUIForUser(user) {
         headerUserProfile.classList.remove('hidden');
         userEmail.textContent = user.email;
         headerUserEmail.textContent = user.email;
+        
+        // Set avatar image from user metadata
+        const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
+        if (avatarUrl && userAvatar) {
+            userAvatar.src = avatarUrl;
+        }
     } else {
         loginBtn.classList.remove('hidden');
         headerLoginBtn.classList.remove('hidden');
