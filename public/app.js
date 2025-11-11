@@ -226,7 +226,14 @@ async function startSession(force = false) {
             body: JSON.stringify({})
         });
         
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Start session failed:', response.status, errorData);
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
+        console.log('Session started:', data);
         sessionId = data.session_id;
         
         chatMessages.innerHTML = '';
@@ -533,16 +540,19 @@ async function deleteChat(sessionIdToDelete) {
     }
 }
 
-function startNewChat() {
-    if (sessionId) {
-        sessionId = null;
-        chatMessages.innerHTML = '';
-        votePrompt.classList.add('hidden');
-        
-        startSession(true);
-        showScreen(chatScreen);
-        updateActiveNav(navChat);
+async function startNewChat() {
+    if (!sessionId) {
+        return;
     }
+    
+    sessionId = null;
+    chatMessages.innerHTML = '';
+    votePrompt.classList.add('hidden');
+    
+    showScreen(chatScreen);
+    updateActiveNav(navChat);
+    
+    await startSession(true);
 }
 
 async function startVoiceRecording() {
