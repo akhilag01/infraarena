@@ -410,8 +410,11 @@ async function loadLeaderboard() {
 
 async function loadChatHistory() {
     if (!authToken) {
+        console.log('loadChatHistory: No auth token, skipping');
         return;
     }
+    
+    console.log('loadChatHistory: Fetching chat history...');
     
     try {
         const response = await fetch('/api/chat-history', {
@@ -419,12 +422,20 @@ async function loadChatHistory() {
                 'Authorization': `Bearer ${authToken}`
             }
         });
+        
+        if (!response.ok) {
+            console.error('loadChatHistory: HTTP error', response.status);
+            return;
+        }
+        
         const data = await response.json();
+        console.log('loadChatHistory: Received data', data);
         
         const chatList = document.getElementById('sidebar-chat-list');
         chatList.innerHTML = '';
         
         if (data.sessions && data.sessions.length > 0) {
+            console.log(`loadChatHistory: Loading ${data.sessions.length} sessions`);
             data.sessions.forEach(session => {
                 const item = document.createElement('div');
                 item.className = 'sidebar-chat-item';

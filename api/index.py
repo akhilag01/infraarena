@@ -524,13 +524,18 @@ async def get_chat_history(authorization: str = Header(None)):
             raise HTTPException(status_code=401, detail="Invalid token")
         
         user_id = response.user.id
+        print(f"Fetching chat history for user: {user_id}")
         
         # Get user's chat sessions ordered by last updated
         sessions = supabase.table('sessions').select('*').eq('user_id', user_id).order('updated_at', desc=True).execute()
         
+        print(f"Found {len(sessions.data)} sessions for user {user_id}")
+        
         return {"sessions": sessions.data}
     except Exception as e:
         print(f"Error fetching chat history: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/chat-session/{session_id}")
