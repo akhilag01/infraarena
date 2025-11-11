@@ -423,11 +423,22 @@ async def google_auth():
 async def verify_token(token_request: AuthTokenRequest):
     supabase = get_supabase()
     try:
-        user = supabase.auth.get_user(token_request.token)
-        if not user:
+        response = supabase.auth.get_user(token_request.token)
+        if not response or not response.user:
             raise HTTPException(status_code=401, detail="Invalid token")
-        return {"user": user.user}
+        
+        # Return user data in a serializable format
+        user = response.user
+        return {
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "user_metadata": user.user_metadata,
+                "created_at": str(user.created_at) if hasattr(user, 'created_at') else None
+            }
+        }
     except Exception as e:
+        print(f"Error verifying token: {e}")
         raise HTTPException(status_code=401, detail=str(e))
 
 @app.post("/api/auth/logout")
