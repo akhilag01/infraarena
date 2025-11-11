@@ -419,6 +419,31 @@ async def google_auth():
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+class CodeExchangeRequest(BaseModel):
+    code: str
+
+@app.post("/api/auth/exchange-code")
+async def exchange_code(request: CodeExchangeRequest):
+    supabase = get_supabase()
+    try:
+        # Exchange the code for a session
+        response = supabase.auth.exchange_code_for_session({"auth_code": request.code})
+        
+        if response and response.session:
+            return {
+                "access_token": response.session.access_token,
+                "user": {
+                    "id": response.user.id,
+                    "email": response.user.email,
+                    "user_metadata": response.user.user_metadata
+                }
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to exchange code")
+    except Exception as e:
+        print(f"Error exchanging code: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.post("/api/auth/verify")
 async def verify_token(token_request: AuthTokenRequest):
     supabase = get_supabase()

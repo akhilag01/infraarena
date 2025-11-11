@@ -686,48 +686,77 @@ logoutBtn.addEventListener('click', async () => {
     }
 });
 
-// Check for OAuth callback (hash fragment from Supabase)
+// Check for OAuth callback (both hash and query params from Supabase)
 function handleOAuthCallback() {
     console.log('Checking for OAuth callback...');
     console.log('Current URL:', window.location.href);
     console.log('Hash:', window.location.hash);
+    console.log('Search:', window.location.search);
     
+    // Check for hash fragment (implicit flow)
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
-    const accessToken = hashParams.get('access_token');
+    let accessToken = hashParams.get('access_token');
+    
+    // Check for query params (PKCE flow - code exchange)
+    const searchParams = new URLSearchParams(window.location.search);
+    const code = searchParams.get('code');
     
     console.log('Access token from hash:', accessToken);
+    console.log('Code from query:', code);
     
-    if (accessToken) {
-        console.log('Found access token, storing and verifying...');
-        // Store the token
-        authToken = accessToken;
-        localStorage.setItem('authToken', accessToken);
-        
-        // Verify and get user data
-        fetch('/api/auth/verify', {
+    // If we have a code, exchange it for a token
+    if (code && !accessToken) {
+        console.log('Found auth code, exchanging for token...');
+        fetch('/api/auth/exchange-code', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: accessToken })
+            body: JSON.stringify({ code: code })
         })
         .then(res => res.json())
         .then(data => {
-            console.log('Verify response:', data);
-            if (data.user) {
-                console.log('User verified, updating UI...');
-                updateUIForUser(data.user);
-                // Close login modal if open
-                loginModal.classList.add('hidden');
-                // Clean up URL
-                window.history.replaceState({}, document.title, window.location.pathname);
+            console.log('Code exchange response:', data);
+            if (data.access_token) {
+                accessToken = data.access_token;
+                verifyAndUpdateUser(accessToken);
             }
         })
         .catch(err => {
-            console.error('Error verifying OAuth token:', err);
-            localStorage.removeItem('authToken');
+            console.error('Error exchanging code:', err);
         });
+    } else if (accessToken) {
+        console.log('Found access token directly, verifying...');
+        verifyAndUpdateUser(accessToken);
     } else {
-        console.log('No access token found in URL');
+        console.log('No access token or code found in URL');
     }
+}
+
+function verifyAndUpdateUser(accessToken) {
+    console.log('Verifying token and updating user...');
+    authToken = accessToken;
+    localStorage.setItem('authToken', accessToken);
+    
+    fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: accessToken })
+    })
+    .then(res => res.json())
+    .then(data => {
+        console.log('Verify response:', data);
+        if (data.user) {
+            console.log('User verified, updating UI...');
+            updateUIForUser(data.user);
+            // Close login modal if open
+            loginModal.classList.add('hidden');
+            // Clean up URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    })
+    .catch(err => {
+        console.error('Error verifying OAuth token:', err);
+        localStorage.removeItem('authToken');
+    });
 }
 
 // Check for existing auth token on load
