@@ -153,8 +153,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Cache only (session data now in Supabase)
-models_cache = None
+# No caching - always fetch fresh data from Supabase
 
 # Request models
 class StartSessionRequest(BaseModel):
@@ -176,12 +175,10 @@ class AuthTokenRequest(BaseModel):
     token: str
 
 def get_models():
-    global models_cache
-    if models_cache is None:
-        supabase = get_supabase()
-        response = supabase.table('tts_models').select('*').execute()
-        models_cache = response.data
-    return models_cache
+    # Always fetch fresh data - no caching to ensure ELO ratings are up-to-date
+    supabase = get_supabase()
+    response = supabase.table('tts_models').select('*').execute()
+    return response.data
 
 def get_tts_service():
     global _tts_service
