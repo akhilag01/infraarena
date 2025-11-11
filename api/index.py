@@ -153,8 +153,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory storage
-conversation_store = {}
+# Cache only (session data now in Supabase)
 models_cache = None
 
 # Request models
@@ -208,19 +207,10 @@ async def start_session():
     supabase.table('sessions').insert({
         'session_id': session_id,
         'model_a_id': selected_models[0]['id'],
-        'model_b_id': selected_models[1]['id']
+        'model_b_id': selected_models[1]['id'],
+        'messages': [],
+        'prompt_count': 0
     }).execute()
-    
-    conversation_store[session_id] = {
-        "messages": [],
-        "model_a": selected_models[0]['name'],
-        "model_b": selected_models[1]['name'],
-        "model_a_provider": selected_models[0]['provider'],
-        "model_b_provider": selected_models[1]['provider'],
-        "model_a_id": selected_models[0]['id'],
-        "model_b_id": selected_models[1]['id'],
-        "prompt_count": 0
-    }
     
     return {
         "session_id": session_id,
@@ -229,58 +219,70 @@ async def start_session():
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
-    if request.session_id not in conversation_store:
+    supabase = get_supabase()
+    
+    # Get session from Supabase
+    session_data = supabase.table('sessions').select('*').eq('session_id', request.session_id).single().execute()
+    if not session_data.data:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    conv = conversation_store[request.session_id]
+    session = session_data.data
     models = get_models()
     if len(models) < 2:
         raise HTTPException(status_code=500, detail="Not enough TTS models available")
     
+    # Select new random models for this turn
     selected_models = random.sample(models, 2)
     
-    conv["model_a"] = selected_models[0]['name']
-    conv["model_b"] = selected_models[1]['name']
-    conv["model_a_provider"] = selected_models[0]['provider']
-    conv["model_b_provider"] = selected_models[1]['provider']
-    conv["model_a_id"] = selected_models[0]['id']
-    conv["model_b_id"] = selected_models[1]['id']
+    # Get current messages
+    messages = session.get('messages', [])
+    messages.append({"role": "user", "content": request.message})
     
-    conv["messages"].append({"role": "user", "content": request.message})
-    
+    # Generate AI response
     openai_client = get_openai_client()
     response = openai_client.chat.completions.create(
         model="gpt-4",
-        messages=conv["messages"]
+        messages=messages
     )
     
     assistant_message = response.choices[0].message.content
-    conv["messages"].append({"role": "assistant", "content": assistant_message})
+    messages.append({"role": "assistant", "content": assistant_message})
     
+    # Generate TTS audio
     tts_service = get_tts_service()
-    audio_a = await tts_service.generate_speech(assistant_message, conv["model_a"])
-    audio_b = await tts_service.generate_speech(assistant_message, conv["model_b"])
+    audio_a = await tts_service.generate_speech(assistant_message, selected_models[0]['name'])
+    audio_b = await tts_service.generate_speech(assistant_message, selected_models[1]['name'])
     
-    conv["prompt_count"] += 1
+    # Update session in Supabase
+    new_prompt_count = session.get('prompt_count', 0) + 1
+    supabase.table('sessions').update({
+        'messages': messages,
+        'prompt_count': new_prompt_count,
+        'model_a_id': selected_models[0]['id'],
+        'model_b_id': selected_models[1]['id']
+    }).eq('session_id', request.session_id).execute()
     
     return {
         "text": assistant_message,
         "audio_a": audio_a.hex(),
         "audio_b": audio_b.hex(),
-        "prompt_count": conv["prompt_count"],
+        "prompt_count": new_prompt_count,
         "should_vote": True
     }
 
 @app.post("/api/vote")
 async def vote(request: VoteRequest):
     supabase = get_supabase()
-    if request.session_id not in conversation_store:
+    
+    # Get session from Supabase
+    session_data = supabase.table('sessions').select('*').eq('session_id', request.session_id).single().execute()
+    if not session_data.data:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    conv = conversation_store[request.session_id]
+    session = session_data.data
     
-    model_a_data = supabase.table('tts_models').select('*').eq('id', conv["model_a_id"]).single().execute()
-    model_b_data = supabase.table('tts_models').select('*').eq('id', conv["model_b_id"]).single().execute()
+    model_a_data = supabase.table('tts_models').select('*').eq('id', session["model_a_id"]).single().execute()
+    model_b_data = supabase.table('tts_models').select('*').eq('id', session["model_b_id"]).single().execute()
     
     model_a = model_a_data.data
     model_b = model_b_data.data
@@ -316,9 +318,8 @@ async def vote(request: VoteRequest):
         'total_votes': model_b['total_votes'] + 1
     }).eq('id', model_b['id']).execute()
     
-    session_data = supabase.table('sessions').select('id').eq('session_id', request.session_id).single().execute()
     supabase.table('votes').insert({
-        'session_id': session_data.data['id'],
+        'session_id': session['id'],
         'winner_model_id': winner_id,
         'loser_model_id': loser_id,
         'vote_type': request.winner,
@@ -328,17 +329,17 @@ async def vote(request: VoteRequest):
         'model_b_elo_before': model_b['elo_rating'],
         'model_a_elo_after': new_a_elo,
         'model_b_elo_after': new_b_elo,
-        'prompt_number': conv["prompt_count"]
+        'prompt_number': session.get("prompt_count", 0)
     }).execute()
     
     return {
         "message": "Vote recorded",
         "winner_elo": new_a_elo,
         "loser_elo": new_b_elo,
-        "model_a_name": conv["model_a"],
-        "model_a_provider": conv["model_a_provider"],
-        "model_b_name": conv["model_b"],
-        "model_b_provider": conv["model_b_provider"]
+        "model_a_name": model_a['name'],
+        "model_a_provider": model_a['provider'],
+        "model_b_name": model_b['name'],
+        "model_b_provider": model_b['provider']
     }
 
 @app.get("/api/leaderboard")
