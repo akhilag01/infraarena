@@ -214,19 +214,15 @@ async def start_session(authorization: str = Header(None)):
             pass
     
     try:
-        # Build session data - only include user_id and title if columns exist (migration has been run)
         session_data = {
             'session_id': session_id,
             'model_a_id': selected_models[0]['id'],
             'model_b_id': selected_models[1]['id'],
             'messages': [],
-            'prompt_count': 0
+            'prompt_count': 0,
+            'user_id': user_id,
+            'title': 'New Chat'
         }
-        
-        # Add optional fields if user is authenticated
-        if user_id:
-            session_data['user_id'] = user_id
-            session_data['title'] = 'New Chat'
         
         supabase.table('sessions').insert(session_data).execute()
     except Exception as e:
