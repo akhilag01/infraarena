@@ -410,8 +410,6 @@ async function startVoiceRecording() {
             formData.append('file', audioBlob, 'audio.webm');
             
             try {
-                addMessage('🎤 Transcribing...', false, 'System');
-                
                 const response = await fetch('/api/transcribe', {
                     method: 'POST',
                     body: formData
@@ -424,11 +422,6 @@ async function startVoiceRecording() {
                 const data = await response.json();
                 
                 if (data.text && data.text.trim()) {
-                    const lastMessage = chatMessages.lastChild;
-                    if (lastMessage && lastMessage.textContent.includes('Transcribing')) {
-                        chatMessages.removeChild(lastMessage);
-                    }
-                    
                     sendMessage(data.text);
                 } else {
                     addMessage('Could not transcribe audio. Please try again.', false, 'System');
