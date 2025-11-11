@@ -666,6 +666,39 @@ logoutBtn.addEventListener('click', async () => {
     }
 });
 
+// Check for OAuth callback (hash fragment from Supabase)
+function handleOAuthCallback() {
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const accessToken = hashParams.get('access_token');
+    
+    if (accessToken) {
+        // Store the token
+        authToken = accessToken;
+        localStorage.setItem('authToken', accessToken);
+        
+        // Verify and get user data
+        fetch('/api/auth/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: accessToken })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.user) {
+                updateUIForUser(data.user);
+                // Close login modal if open
+                loginModal.classList.add('hidden');
+                // Clean up URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        })
+        .catch(err => {
+            console.error('Error verifying OAuth token:', err);
+            localStorage.removeItem('authToken');
+        });
+    }
+}
+
 // Check for existing auth token on load
 const storedToken = localStorage.getItem('authToken');
 if (storedToken) {
@@ -686,6 +719,9 @@ if (storedToken) {
     .catch(() => {
         localStorage.removeItem('authToken');
     });
+} else {
+    // Check for OAuth callback
+    handleOAuthCallback();
 }
 
 startSession();
