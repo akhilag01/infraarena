@@ -355,11 +355,18 @@ async function loadLeaderboard() {
                 ? ((model.wins / model.total_votes) * 100).toFixed(1) 
                 : 0;
             
+            const logo = getProviderLogo(model.provider);
+            
             item.innerHTML = `
                 <div class="rank ${index < 3 ? 'top' : ''}">#${index + 1}</div>
                 <div class="model-info">
-                    <div class="model-name">${model.name}</div>
-                    <div class="model-provider">${model.provider}</div>
+                    <div class="model-name-with-logo">
+                        <div class="leaderboard-logo">${logo}</div>
+                        <div>
+                            <div class="model-name">${model.name}</div>
+                            <div class="model-provider">${model.provider}</div>
+                        </div>
+                    </div>
                 </div>
                 <div class="model-stats">
                     <div class="elo">${model.elo}</div>
