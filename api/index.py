@@ -511,8 +511,8 @@ async def get_chat_history(authorization: str = Header(None)):
         
         user_id = response.user.id
         
-        # Get user's chat sessions
-        sessions = supabase.table('sessions').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
+        # Get user's chat sessions ordered by last updated
+        sessions = supabase.table('sessions').select('*').eq('user_id', user_id).order('updated_at', desc=True).execute()
         
         return {"sessions": sessions.data}
     except Exception as e:

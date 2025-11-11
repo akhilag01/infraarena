@@ -6,10 +6,8 @@ let currentUser = null;
 let authToken = null;
 
 const chatScreen = document.getElementById('chat-screen');
-const historyScreen = document.getElementById('history-screen');
 const leaderboardScreen = document.getElementById('leaderboard-screen');
 const backBtn = document.getElementById('back-btn');
-const backFromHistoryBtn = document.getElementById('back-from-history-btn');
 const messageInput = document.getElementById('message-input');
 const sendBtn = document.getElementById('send-btn');
 const voiceBtn = document.getElementById('voice-btn');
@@ -213,9 +211,14 @@ function hideVotePrompt() {
 
 async function startSession() {
     try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) {
+            headers['Authorization'] = `Bearer ${authToken}`;
+        }
+        
         const response = await fetch('/api/start-session', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: headers,
             body: JSON.stringify({})
         });
         
@@ -224,6 +227,10 @@ async function startSession() {
         
         chatMessages.innerHTML = '';
         showScreen(chatScreen);
+        
+        if (authToken) {
+            loadChatHistory();
+        }
     } catch (error) {
         console.error('Error starting session:', error);
         alert('Failed to start session. Please try again.');
@@ -255,6 +262,10 @@ async function sendMessage(message) {
         
         if (data.should_vote) {
             showVotePrompt();
+        }
+        
+        if (authToken) {
+            loadChatHistory();
         }
     } catch (error) {
         console.error('Error sending message:', error);
@@ -386,9 +397,8 @@ async function loadLeaderboard() {
     }
 }
 
-async function loadHistory() {
+async function loadChatHistory() {
     if (!authToken) {
-        alert('Please log in to view chat history');
         return;
     }
     
@@ -400,70 +410,82 @@ async function loadHistory() {
         });
         const data = await response.json();
         
-        const historyContent = document.getElementById('history-content');
-        historyContent.innerHTML = '';
+        const chatList = document.getElementById('sidebar-chat-list');
+        chatList.innerHTML = '';
         
         if (data.sessions && data.sessions.length > 0) {
             data.sessions.forEach(session => {
                 const item = document.createElement('div');
-                item.className = 'history-item';
+                item.className = 'sidebar-chat-item';
+                if (sessionId === session.session_id) {
+                    item.classList.add('active');
+                }
                 
                 const date = new Date(session.created_at);
-                const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const formattedDate = formatRelativeTime(date);
                 
                 item.innerHTML = `
-                    <div class="history-item-content">
-                        <div class="history-item-title">${session.title || 'Untitled Chat'}</div>
-                        <div class="history-item-date">${formattedDate}</div>
+                    <div class="sidebar-chat-item-content">
+                        <div class="sidebar-chat-item-title">${session.title || 'New Chat'}</div>
+                        <div class="sidebar-chat-item-date">${formattedDate}</div>
                     </div>
-                    <button class="history-item-delete" data-session-id="${session.session_id}">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <button class="sidebar-chat-item-delete" data-session-id="${session.session_id}">
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M5 3V1h6v2h4v2h-1v9a1 1 0 01-1 1H3a1 1 0 01-1-1V5H1V3h4zm2 3v6h2V6H7zm4 0v6h2V6h-2z"/>
                         </svg>
                     </button>
                 `;
                 
-                // Load chat on click
                 item.addEventListener('click', (e) => {
-                    if (!e.target.closest('.history-item-delete')) {
+                    if (!e.target.closest('.sidebar-chat-item-delete')) {
                         loadChatSession(session.session_id);
                     }
                 });
                 
-                // Delete chat on delete button click
-                const deleteBtn = item.querySelector('.history-item-delete');
+                const deleteBtn = item.querySelector('.sidebar-chat-item-delete');
                 deleteBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     deleteChat(session.session_id);
                 });
                 
-                historyContent.appendChild(item);
+                chatList.appendChild(item);
             });
         } else {
-            historyContent.innerHTML = '<p class="empty-state">No chat history yet. Start a conversation to see it here!</p>';
+            chatList.innerHTML = '<p class="empty-state">No chats yet</p>';
         }
-        
-        showScreen(historyScreen);
     } catch (error) {
-        console.error('Error loading history:', error);
-        alert('Failed to load chat history. Please try again.');
+        console.error('Error loading chat history:', error);
     }
 }
 
-async function loadChatSession(sessionId) {
+function formatRelativeTime(date) {
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+}
+
+async function loadChatSession(sessionIdToLoad) {
     try {
-        const response = await fetch(`/api/chat-session/${sessionId}`, {
+        const response = await fetch(`/api/chat-session/${sessionIdToLoad}`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
         });
         const data = await response.json();
         
-        // Set current session
         sessionId = data.session_id;
         
-        // Clear and reload messages
         chatMessages.innerHTML = '';
+        votePrompt.classList.add('hidden');
+        
         if (data.messages && data.messages.length > 0) {
             data.messages.forEach(msg => {
                 addMessage(msg.content, msg.role === 'user');
@@ -472,6 +494,7 @@ async function loadChatSession(sessionId) {
         
         showScreen(chatScreen);
         updateActiveNav(navChat);
+        loadChatHistory();
     } catch (error) {
         console.error('Error loading chat session:', error);
         alert('Failed to load chat session. Please try again.');
@@ -492,7 +515,11 @@ async function deleteChat(sessionIdToDelete) {
         });
         
         if (response.ok) {
-            loadHistory(); // Reload history list
+            if (sessionId === sessionIdToDelete) {
+                startNewChat();
+            } else {
+                loadChatHistory();
+            }
         } else {
             alert('Failed to delete chat.');
         }
@@ -503,14 +530,14 @@ async function deleteChat(sessionIdToDelete) {
 }
 
 function startNewChat() {
-    // Clear current session
     sessionId = null;
     chatMessages.innerHTML = '';
     votePrompt.classList.add('hidden');
     
-    // Start fresh session
     startSession();
     showScreen(chatScreen);
+    updateActiveNav(navChat);
+    loadChatHistory();
 }
 
 async function startVoiceRecording() {
@@ -637,7 +664,6 @@ document.querySelectorAll('.vote-btn').forEach(btn => {
 const sidebar = document.getElementById('sidebar');
 const sidebarToggle = document.getElementById('sidebar-toggle');
 const navChat = document.getElementById('nav-chat');
-const navHistory = document.getElementById('nav-history');
 const navLeaderboard = document.getElementById('nav-leaderboard');
 
 sidebarToggle.addEventListener('click', () => {
@@ -649,19 +675,9 @@ navChat.addEventListener('click', () => {
     updateActiveNav(navChat);
 });
 
-navHistory.addEventListener('click', () => {
-    loadHistory();
-    updateActiveNav(navHistory);
-});
-
 navLeaderboard.addEventListener('click', () => {
     loadLeaderboard();
     updateActiveNav(navLeaderboard);
-});
-
-backFromHistoryBtn.addEventListener('click', () => {
-    showScreen(chatScreen);
-    updateActiveNav(navChat);
 });
 
 function updateActiveNav(activeItem) {
@@ -701,13 +717,14 @@ function updateUIForUser(user) {
         console.log('Login buttons hidden:', loginBtn.classList.contains('hidden'), headerLoginBtn.classList.contains('hidden'));
         console.log('Profile visible:', !userProfile.classList.contains('hidden'));
         
-        // Set avatar image from user metadata
         const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
         console.log('Avatar URL:', avatarUrl);
         if (avatarUrl && userAvatar) {
             userAvatar.src = avatarUrl;
             console.log('Set avatar src to:', avatarUrl);
         }
+        
+        loadChatHistory();
     } else {
         console.log('User is logged out, resetting UI...');
         loginBtn.classList.remove('hidden');
@@ -716,6 +733,9 @@ function updateUIForUser(user) {
         headerUserProfile.classList.add('hidden');
         currentUser = null;
         authToken = null;
+        
+        const chatList = document.getElementById('sidebar-chat-list');
+        if (chatList) chatList.innerHTML = '';
     }
 }
 
