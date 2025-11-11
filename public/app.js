@@ -540,10 +540,23 @@ function updateActiveNav(activeItem) {
 
 // Authentication functions
 function updateUIForUser(user) {
+    console.log('updateUIForUser called with:', user);
     currentUser = user;
     const userAvatar = document.getElementById('user-avatar');
     
+    console.log('DOM elements:', {
+        loginBtn: loginBtn,
+        headerLoginBtn: headerLoginBtn,
+        userProfile: userProfile,
+        userEmail: userEmail,
+        userAvatar: userAvatar
+    });
+    
     if (user) {
+        console.log('User is logged in, updating UI...');
+        console.log('User email:', user.email);
+        console.log('User metadata:', user.user_metadata);
+        
         loginBtn.classList.add('hidden');
         headerLoginBtn.classList.add('hidden');
         userProfile.classList.remove('hidden');
@@ -551,12 +564,19 @@ function updateUIForUser(user) {
         userEmail.textContent = user.email;
         headerUserEmail.textContent = user.email;
         
+        console.log('Updated userEmail text to:', user.email);
+        console.log('Login buttons hidden:', loginBtn.classList.contains('hidden'), headerLoginBtn.classList.contains('hidden'));
+        console.log('Profile visible:', !userProfile.classList.contains('hidden'));
+        
         // Set avatar image from user metadata
         const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
+        console.log('Avatar URL:', avatarUrl);
         if (avatarUrl && userAvatar) {
             userAvatar.src = avatarUrl;
+            console.log('Set avatar src to:', avatarUrl);
         }
     } else {
+        console.log('User is logged out, resetting UI...');
         loginBtn.classList.remove('hidden');
         headerLoginBtn.classList.remove('hidden');
         userProfile.classList.add('hidden');
