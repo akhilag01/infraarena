@@ -668,10 +668,17 @@ logoutBtn.addEventListener('click', async () => {
 
 // Check for OAuth callback (hash fragment from Supabase)
 function handleOAuthCallback() {
+    console.log('Checking for OAuth callback...');
+    console.log('Current URL:', window.location.href);
+    console.log('Hash:', window.location.hash);
+    
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const accessToken = hashParams.get('access_token');
     
+    console.log('Access token from hash:', accessToken);
+    
     if (accessToken) {
+        console.log('Found access token, storing and verifying...');
         // Store the token
         authToken = accessToken;
         localStorage.setItem('authToken', accessToken);
@@ -684,7 +691,9 @@ function handleOAuthCallback() {
         })
         .then(res => res.json())
         .then(data => {
+            console.log('Verify response:', data);
             if (data.user) {
+                console.log('User verified, updating UI...');
                 updateUIForUser(data.user);
                 // Close login modal if open
                 loginModal.classList.add('hidden');
@@ -696,6 +705,8 @@ function handleOAuthCallback() {
             console.error('Error verifying OAuth token:', err);
             localStorage.removeItem('authToken');
         });
+    } else {
+        console.log('No access token found in URL');
     }
 }
 
