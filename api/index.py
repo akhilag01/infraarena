@@ -382,11 +382,20 @@ async def signup(auth_request: AuthRequest):
             "email": auth_request.email,
             "password": auth_request.password
         })
-        return {
-            "user": response.user,
-            "session": response.session
-        }
+        
+        if response.user:
+            return {
+                "user": {
+                    "id": response.user.id,
+                    "email": response.user.email,
+                    "user_metadata": response.user.user_metadata
+                },
+                "message": "Signup successful! Please check your email to confirm."
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Signup failed")
     except Exception as e:
+        print(f"Signup error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/auth/login")
@@ -397,12 +406,20 @@ async def login(auth_request: AuthRequest):
             "email": auth_request.email,
             "password": auth_request.password
         })
-        return {
-            "user": response.user,
-            "session": response.session,
-            "access_token": response.session.access_token
-        }
+        
+        if response.session and response.user:
+            return {
+                "access_token": response.session.access_token,
+                "user": {
+                    "id": response.user.id,
+                    "email": response.user.email,
+                    "user_metadata": response.user.user_metadata
+                }
+            }
+        else:
+            raise HTTPException(status_code=401, detail="Login failed")
     except Exception as e:
+        print(f"Login error: {e}")
         raise HTTPException(status_code=401, detail=str(e))
 
 @app.post("/api/auth/google")

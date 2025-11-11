@@ -637,7 +637,10 @@ emailSignupBtn.addEventListener('click', async () => {
         
         const data = await response.json();
         if (response.ok) {
-            alert('Signup successful! Please login.');
+            alert(data.message || 'Signup successful! You can now login.');
+            // Clear the form
+            emailInput.value = '';
+            passwordInput.value = '';
         } else {
             alert(data.detail || 'Signup failed');
         }
