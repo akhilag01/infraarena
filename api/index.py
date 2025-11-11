@@ -209,18 +209,29 @@ async def start_session(authorization: str = Header(None)):
             response = supabase.auth.get_user(token)
             if response and response.user:
                 user_id = response.user.id
-        except:
+        except Exception as e:
+            print(f"Error getting user from token: {e}")
             pass
     
-    supabase.table('sessions').insert({
-        'session_id': session_id,
-        'model_a_id': selected_models[0]['id'],
-        'model_b_id': selected_models[1]['id'],
-        'messages': [],
-        'prompt_count': 0,
-        'user_id': user_id,
-        'title': 'New Chat'
-    }).execute()
+    try:
+        # Build session data - only include user_id and title if columns exist (migration has been run)
+        session_data = {
+            'session_id': session_id,
+            'model_a_id': selected_models[0]['id'],
+            'model_b_id': selected_models[1]['id'],
+            'messages': [],
+            'prompt_count': 0
+        }
+        
+        # Add optional fields if user is authenticated
+        if user_id:
+            session_data['user_id'] = user_id
+            session_data['title'] = 'New Chat'
+        
+        supabase.table('sessions').insert(session_data).execute()
+    except Exception as e:
+        print(f"Error creating session: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create session: {str(e)}")
     
     return {
         "session_id": session_id,
