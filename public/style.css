@@ -919,7 +919,10 @@ header h1 {
     text-align: center;
     color: var(--text-secondary);
     padding: 2rem 1rem;
-    font-size: 0.875rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    line-height: 1.4;
 }
 
 .leaderboard-item {

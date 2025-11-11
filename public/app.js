@@ -409,8 +409,11 @@ async function loadLeaderboard() {
 }
 
 async function loadChatHistory() {
+    const chatList = document.getElementById('sidebar-chat-list');
+    
     if (!authToken) {
         console.log('loadChatHistory: No auth token, skipping');
+        chatList.innerHTML = '<p class="empty-state">Log in to see recent chats</p>';
         return;
     }
     
@@ -431,7 +434,6 @@ async function loadChatHistory() {
         const data = await response.json();
         console.log('loadChatHistory: Received data', data);
         
-        const chatList = document.getElementById('sidebar-chat-list');
         chatList.innerHTML = '';
         
         if (data.sessions && data.sessions.length > 0) {
@@ -768,8 +770,7 @@ function updateUIForUser(user) {
         currentUser = null;
         authToken = null;
         
-        const chatList = document.getElementById('sidebar-chat-list');
-        if (chatList) chatList.innerHTML = '';
+        loadChatHistory();
     }
 }
 
@@ -968,10 +969,12 @@ if (storedToken) {
     })
     .catch(() => {
         localStorage.removeItem('authToken');
+        loadChatHistory();
     });
 } else {
     // Check for OAuth callback
     handleOAuthCallback();
+    loadChatHistory();
 }
 
 startSession();
