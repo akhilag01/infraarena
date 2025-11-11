@@ -210,6 +210,10 @@ function hideVotePrompt() {
 }
 
 async function startSession() {
+    if (sessionId) {
+        return;
+    }
+    
     try {
         const headers = { 'Content-Type': 'application/json' };
         if (authToken) {
@@ -229,7 +233,7 @@ async function startSession() {
         showScreen(chatScreen);
         
         if (authToken) {
-            loadChatHistory();
+            setTimeout(() => loadChatHistory(), 300);
         }
     } catch (error) {
         console.error('Error starting session:', error);
@@ -530,14 +534,15 @@ async function deleteChat(sessionIdToDelete) {
 }
 
 function startNewChat() {
-    sessionId = null;
-    chatMessages.innerHTML = '';
-    votePrompt.classList.add('hidden');
-    
-    startSession();
-    showScreen(chatScreen);
-    updateActiveNav(navChat);
-    loadChatHistory();
+    if (sessionId) {
+        sessionId = null;
+        chatMessages.innerHTML = '';
+        votePrompt.classList.add('hidden');
+        
+        startSession();
+        showScreen(chatScreen);
+        updateActiveNav(navChat);
+    }
 }
 
 async function startVoiceRecording() {
@@ -663,6 +668,7 @@ document.querySelectorAll('.vote-btn').forEach(btn => {
 
 const sidebar = document.getElementById('sidebar');
 const sidebarToggle = document.getElementById('sidebar-toggle');
+const newChatBtn = document.getElementById('new-chat-btn');
 const navChat = document.getElementById('nav-chat');
 const navLeaderboard = document.getElementById('nav-leaderboard');
 
@@ -670,8 +676,15 @@ sidebarToggle.addEventListener('click', () => {
     sidebar.classList.toggle('collapsed');
 });
 
-navChat.addEventListener('click', () => {
+newChatBtn.addEventListener('click', () => {
     startNewChat();
+});
+
+navChat.addEventListener('click', () => {
+    if (chatScreen.classList.contains('active')) {
+        return;
+    }
+    showScreen(chatScreen);
     updateActiveNav(navChat);
 });
 

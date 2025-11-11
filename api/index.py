@@ -265,12 +265,19 @@ async def chat(request: ChatRequest):
     
     # Update session in Supabase
     new_prompt_count = session.get('prompt_count', 0) + 1
-    supabase.table('sessions').update({
+    update_data = {
         'messages': messages,
         'prompt_count': new_prompt_count,
         'model_a_id': selected_models[0]['id'],
         'model_b_id': selected_models[1]['id']
-    }).eq('session_id', request.session_id).execute()
+    }
+    
+    # Set title to first message if this is the first prompt
+    if new_prompt_count == 1:
+        title = request.message[:50] + ('...' if len(request.message) > 50 else '')
+        update_data['title'] = title
+    
+    supabase.table('sessions').update(update_data).eq('session_id', request.session_id).execute()
     
     return {
         "text": assistant_message,
