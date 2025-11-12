@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from openai import OpenAI
 from elevenlabs import ElevenLabs
 from supabase import create_client, Client
+from arena.arena_base import TTSModelName
 
 # Initialize clients lazily
 _supabase_client = None
@@ -62,13 +63,20 @@ class TTSService:
         self.cartesia_api_key = os.getenv("CARTESIA_API_KEY")
     
     async def generate_speech(self, text: str, model_name: str) -> bytes:
-        if model_name == "tts-1":
+        # Convert string to enum if necessary
+        if isinstance(model_name, str):
+            try:
+                model_name = TTSModelName(model_name)
+            except ValueError:
+                raise ValueError(f"Unknown model: {model_name}")
+
+        if model_name == TTSModelName.TTS_1:
             return await self._openai_tts(text)
-        elif model_name in ["eleven_v3", "eleven_multilingual_v2"]:
-            return await self._elevenlabs_tts(text, model_name)
-        elif model_name == "aura-2-thalia-en":
+        elif model_name in [TTSModelName.ELEVEN_V3, TTSModelName.ELEVEN_MULTILINGUAL_V2]:
+            return await self._elevenlabs_tts(text, model_name.value)
+        elif model_name == TTSModelName.AURA_2_THALIA_EN:
             return await self._deepgram_tts(text)
-        elif model_name == "sonic-3":
+        elif model_name == TTSModelName.SONIC_3:
             return await self._cartesia_tts(text)
         else:
             raise ValueError(f"Unknown model: {model_name}")
