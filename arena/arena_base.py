@@ -1,6 +1,6 @@
 from typing import Generic, TypeVar, Protocol, Callable
 from enum import Enum
-from arena.elo import calculate_team_elo_from_vote
+from arena.elo import calculate_team_elo_from_vote, calculate_elo_from_vote
 
 TInput = TypeVar("TInput")
 TOutput = TypeVar("TOutput")
@@ -122,6 +122,7 @@ class ArenaBase(Generic[TInput, TOutput]):
             initial_elo: Initial ELO rating for all models (default: 1500.0)
         """
         self.model_chains = model_chains
+
         # Track ELO ratings for each model (using model as key via __hash__)
         self.model_elos: dict[Model, float] = {}
         # Initialize ELO ratings for all models in all chains
@@ -129,6 +130,12 @@ class ArenaBase(Generic[TInput, TOutput]):
             for model in chain.model_chain:
                 if model not in self.model_elos:
                     self.model_elos[model] = initial_elo
+
+        # Track ELO ratings for each model chain as individual entities
+        # (treating the entire chain as a single player, not a team)
+        self.chain_elos: dict[ModelChain[TInput, TOutput], float] = {
+            chain: initial_elo for chain in model_chains
+        }
 
     # === Voting and ELO Management ===
     def record_vote(
@@ -140,29 +147,36 @@ class ArenaBase(Generic[TInput, TOutput]):
         """
         Record a vote between two model chains and update their ELO ratings.
 
-        This method treats each model chain as a team and calculates team-based
-        ELO ratings. Each model in the chain gets the same rating adjustment.
+        This method updates two types of ELO ratings:
+        1. Team-based: Each model in the chain gets the same rating adjustment
+        2. Chain-based: The entire chain is treated as a single entity
 
         Args:
             chain_a: First model chain (team A)
             chain_b: Second model chain (team B)
             vote: The outcome of the vote (A wins, B wins, tie, or both bad)
         """
-        # Get current ELO ratings for all models in each chain
+        # Update team-based ELO ratings (each model in the chain)
         team_a_ratings = [self.model_elos[model] for model in chain_a.model_chain]
         team_b_ratings = [self.model_elos[model] for model in chain_b.model_chain]
 
-        # Calculate new ELO ratings using team-based algorithm
         new_team_a_ratings, new_team_b_ratings = calculate_team_elo_from_vote(
             vote, team_a_ratings, team_b_ratings
         )
 
-        # Update ELO ratings for all models
         for i, model in enumerate(chain_a.model_chain):
             self.model_elos[model] = new_team_a_ratings[i]
 
         for i, model in enumerate(chain_b.model_chain):
             self.model_elos[model] = new_team_b_ratings[i]
+
+        # Update chain-based ELO ratings (treating chains as individual entities)
+        new_chain_a_elo, new_chain_b_elo = calculate_elo_from_vote(
+            vote, self.chain_elos[chain_a], self.chain_elos[chain_b]
+        )
+
+        self.chain_elos[chain_a] = new_chain_a_elo
+        self.chain_elos[chain_b] = new_chain_b_elo
 
     # === Matchup Generation ===
     def generate_matchup(
@@ -219,3 +233,27 @@ class ArenaBase(Generic[TInput, TOutput]):
                     return elo
             raise KeyError(f"Model with name '{model}' not found in arena")
         return self.model_elos[model]
+
+    def get_chain_leaderboard(self) -> list[tuple[ModelChain[TInput, TOutput], float]]:
+        """
+        Get model chains sorted by ELO rating (highest first).
+
+        Returns:
+            List of tuples containing (model_chain, elo_rating) sorted by rating
+        """
+        return sorted(self.chain_elos.items(), key=lambda x: x[1], reverse=True)
+
+    def get_chain_elo(self, chain: ModelChain[TInput, TOutput]) -> float:
+        """
+        Get the current ELO rating for a specific model chain.
+
+        Args:
+            chain: ModelChain object to look up
+
+        Returns:
+            Current ELO rating for the chain
+
+        Raises:
+            KeyError: If chain is not found in the arena
+        """
+        return self.chain_elos[chain]
