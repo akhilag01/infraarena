@@ -81,6 +81,17 @@ class ModelChain(Generic[TInput, TOutput]):
             input_data = model(input_data)
         return input_data
 
+    def __hash__(self) -> int:
+        """Hash based on concatenated model names with '|' separator."""
+        chain_key = "|".join(model.name for model in self.model_chain)
+        return hash(chain_key)
+
+    def __eq__(self, other) -> bool:
+        """Two model chains are equal if they contain the same models in the same order."""
+        if isinstance(other, ModelChain):
+            return self.model_chain == other.model_chain
+        return False
+
 
 class ArenaBase(Generic[TInput, TOutput]):
     """
