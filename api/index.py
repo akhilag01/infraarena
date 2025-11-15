@@ -575,17 +575,14 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
             sentence_terminators = {'.', '!', '?', '\n'}
             audio_chunk_id = 0
             
-            # Sentence queue for TTS processing
-            sentence_queue = asyncio.Queue()
+            # Separate sentence queues for each TTS worker
+            sentence_queues = {}
             
-            # Audio output queues (one per model)
-            audio_outputs = {}
+            # Output queue for streaming audio chunks immediately
+            output_queue = asyncio.Queue()
             
             # TTS worker for processing sentences
-            async def tts_worker(model_name, audio_label):
-                nonlocal audio_outputs
-                audio_outputs[audio_label] = []
-                
+            async def tts_worker(model_name, audio_label, sentence_queue):
                 while True:
                     item = await sentence_queue.get()
                     if item is None:  # Sentinel
@@ -600,8 +597,10 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                             timeout=30.0  # 30 second timeout per sentence
                         )
                         
-                        # Store audio chunk
-                        audio_outputs[audio_label].append({
+                        # Stream audio chunk immediately to client
+                        await output_queue.put({
+                            "type": "audio_chunk",
+                            "label": audio_label,
                             "chunk_id": chunk_id,
                             "data": audio_bytes.hex()
                         })
@@ -616,13 +615,16 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                     finally:
                         sentence_queue.task_done()
             
-            # Start TTS worker(s)
+            # Start TTS worker(s) with separate queues
             tts_tasks = []
             if request.mode == 'direct':
-                tts_tasks.append(asyncio.create_task(tts_worker(selected_models[0]['name'], 'a')))
+                sentence_queues['a'] = asyncio.Queue()
+                tts_tasks.append(asyncio.create_task(tts_worker(selected_models[0]['name'], 'a', sentence_queues['a'])))
             else:
-                tts_tasks.append(asyncio.create_task(tts_worker(selected_models[0]['name'], 'a')))
-                tts_tasks.append(asyncio.create_task(tts_worker(selected_models[1]['name'], 'b')))
+                sentence_queues['a'] = asyncio.Queue()
+                sentence_queues['b'] = asyncio.Queue()
+                tts_tasks.append(asyncio.create_task(tts_worker(selected_models[0]['name'], 'a', sentence_queues['a'])))
+                tts_tasks.append(asyncio.create_task(tts_worker(selected_models[1]['name'], 'b', sentence_queues['b'])))
             
             # Stream LLM tokens and extract sentences
             stream = openai_client.chat.completions.create(
@@ -651,27 +653,29 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                                 sentences.append(temp_buffer.strip())
                                 temp_buffer = ""
                         
-                        # Queue complete sentences for TTS
+                        # Queue complete sentences to each TTS worker
                         for sentence in sentences:
                             if sentence:
-                                # Each worker will get the same sentence
-                                for _ in range(len(tts_tasks)):
-                                    await sentence_queue.put((sentence, audio_chunk_id))
+                                for queue in sentence_queues.values():
+                                    await queue.put((sentence, audio_chunk_id))
                                 audio_chunk_id += 1
                         
                         sentence_buffer = temp_buffer
+                        
+                    # Yield any audio chunks that are ready
+                    while not output_queue.empty():
+                        audio_chunk = await output_queue.get()
+                        yield json.dumps(audio_chunk) + "\n"
+                        output_queue.task_done()
             
             # Process remaining buffer
             if sentence_buffer.strip():
-                for _ in range(len(tts_tasks)):
-                    await sentence_queue.put((sentence_buffer.strip(), audio_chunk_id))
+                for queue in sentence_queues.values():
+                    await queue.put((sentence_buffer.strip(), audio_chunk_id))
             
             # Stop TTS workers
-            for _ in range(len(tts_tasks)):
-                await sentence_queue.put(None)
-            
-            # Wait for TTS completion
-            await asyncio.gather(*tts_tasks)
+            for queue in sentence_queues.values():
+                await queue.put(None)
             
             # Send complete text
             yield json.dumps({"type": "text", "content": assistant_message}) + "\n"
@@ -690,24 +694,14 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                     "model_b": selected_models[1].get('display_name') or selected_models[1]['name']
                 }) + "\n"
             
-            # Send all audio chunks
-            if 'a' in audio_outputs:
-                for chunk_data in audio_outputs['a']:
-                    yield json.dumps({
-                        "type": "audio_chunk",
-                        "label": "a",
-                        "chunk_id": chunk_data["chunk_id"],
-                        "data": chunk_data["data"]
-                    }) + "\n"
+            # Wait for all TTS workers to complete
+            await asyncio.gather(*tts_tasks)
             
-            if 'b' in audio_outputs:
-                for chunk_data in audio_outputs['b']:
-                    yield json.dumps({
-                        "type": "audio_chunk",
-                        "label": "b",
-                        "chunk_id": chunk_data["chunk_id"],
-                        "data": chunk_data["data"]
-                    }) + "\n"
+            # Stream remaining audio chunks
+            while not output_queue.empty():
+                audio_chunk = await output_queue.get()
+                yield json.dumps(audio_chunk) + "\n"
+                output_queue.task_done()
             
             # Update session
             new_prompt_count = session.get('prompt_count', 0) + 1
