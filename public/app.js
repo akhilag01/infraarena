@@ -164,86 +164,239 @@ class StreamingAudioPlayer {
     }
 }
 
-// Real-time streaming audio player with jitter buffer for sentence chunks
-class RealtimeAudioPlayer {
-    constructor(label) {
+// Progressive audio streaming player - like YouTube/SoundCloud
+// Combines sentence chunks into a single audio element with MediaSource
+class ProgressiveAudioPlayer {
+    constructor(label, voiceCard) {
         this.label = label;
-        this.chunks = []; // Ordered audio chunks
-        this.currentChunkIndex = 0;
-        this.isPlaying = false;
-        this.audioQueue = [];
-        this.currentAudio = null;
-        this.jitterBuffer = 2; // Wait for N chunks before playing
+        this.voiceCard = voiceCard;
+        this.audioElement = new Audio();
+        this.mediaSource = new MediaSource();
+        this.sourceBuffer = null;
+        this.chunks = {}; // Map of chunkId -> bytes
+        this.queue = [];
+        this.isAppending = false;
+        this.isStreamComplete = false;
+        this.nextChunkId = 0;
+        this.totalChunks = 0;
+        this.isUserPaused = false;
+        
+        // Setup MediaSource for progressive loading
+        this.audioElement.src = URL.createObjectURL(this.mediaSource);
+        
+        this.mediaSource.addEventListener('sourceopen', () => {
+            try {
+                this.sourceBuffer = this.mediaSource.addSourceBuffer('audio/mpeg');
+                this.sourceBuffer.mode = 'sequence';
+                
+                this.sourceBuffer.addEventListener('updateend', () => {
+                    this.isAppending = false;
+                    this.processQueue();
+                    this.updateProgressUI();
+                });
+                
+                this.sourceBuffer.addEventListener('error', (e) => {
+                    console.error('SourceBuffer error:', e);
+                });
+            } catch (e) {
+                console.error('Error creating SourceBuffer:', e);
+            }
+        });
+        
+        // UI updates
+        this.audioElement.addEventListener('timeupdate', () => this.updateProgressUI());
+        this.audioElement.addEventListener('loadedmetadata', () => this.updateProgressUI());
+        this.audioElement.addEventListener('ended', () => this.updatePlayButtonUI(false));
+        this.audioElement.addEventListener('play', () => this.updatePlayButtonUI(true));
+        this.audioElement.addEventListener('pause', () => this.updatePlayButtonUI(false));
+        
+        this.setupUI();
+    }
+    
+    setupUI() {
+        if (!this.voiceCard) return;
+        
+        // Create play button
+        const playBtn = document.createElement('button');
+        playBtn.className = 'play-btn';
+        playBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2l10 6-10 6V2z"/></svg>';
+        playBtn.onclick = () => this.togglePlay();
+        
+        // Create progress bar container
+        const progressContainer = document.createElement('div');
+        progressContainer.className = 'progress-container';
+        progressContainer.style.cssText = 'flex: 1; margin: 0 12px; cursor: pointer; position: relative;';
+        
+        // Background bar (total)
+        const progressBar = document.createElement('div');
+        progressBar.className = 'progress-bar';
+        progressBar.style.cssText = 'height: 4px; background: #e0e0e0; border-radius: 2px; position: relative; overflow: hidden;';
+        
+        // Buffered bar (downloaded chunks - light blue)
+        const bufferedBar = document.createElement('div');
+        bufferedBar.className = 'buffered-progress';
+        bufferedBar.style.cssText = 'position: absolute; height: 100%; background: #b3d9ff; width: 0%; transition: width 0.2s;';
+        
+        // Played bar (current playback - dark blue)
+        const playedBar = document.createElement('div');
+        playedBar.className = 'played-progress';
+        playedBar.style.cssText = 'position: absolute; height: 100%; background: #1a73e8; width: 0%; transition: width 0.1s;';
+        
+        // Time display
+        const timeLabel = document.createElement('span');
+        timeLabel.className = 'time-label';
+        timeLabel.textContent = '0:00';
+        timeLabel.style.cssText = 'font-size: 12px; color: #666; min-width: 35px;';
+        
+        progressBar.appendChild(bufferedBar);
+        progressBar.appendChild(playedBar);
+        progressContainer.appendChild(progressBar);
+        
+        // Click to seek
+        progressContainer.onclick = (e) => {
+            const rect = progressBar.getBoundingClientRect();
+            const percent = (e.clientX - rect.left) / rect.width;
+            this.audioElement.currentTime = percent * this.audioElement.duration;
+        };
+        
+        // Create controls container
+        const controls = document.createElement('div');
+        controls.className = 'voice-controls';
+        controls.style.cssText = 'display: flex; align-items: center; margin-top: 8px;';
+        
+        controls.appendChild(playBtn);
+        controls.appendChild(progressContainer);
+        controls.appendChild(timeLabel);
+        
+        // Store references
+        this.playBtn = playBtn;
+        this.bufferedBar = bufferedBar;
+        this.playedBar = playedBar;
+        this.timeLabel = timeLabel;
+        
+        // Add to voice card
+        const existingControls = this.voiceCard.querySelector('.voice-controls');
+        if (existingControls) {
+            existingControls.replaceWith(controls);
+        } else {
+            this.voiceCard.appendChild(controls);
+        }
     }
     
     addChunk(chunkId, hexData) {
-        // Convert hex to audio blob
+        // Store chunk
         const bytes = new Uint8Array(hexData.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-        const blob = new Blob([bytes], { type: 'audio/mpeg' });
-        const url = URL.createObjectURL(blob);
+        this.chunks[chunkId] = bytes;
         
-        this.chunks[chunkId] = url;
+        // Update total chunks estimate
+        this.totalChunks = Math.max(this.totalChunks, chunkId + 1);
         
-        // Start playback if we have enough buffered
-        if (!this.isPlaying && Object.keys(this.chunks).length >= this.jitterBuffer) {
-            this.startPlayback();
+        // Try to append if it's the next expected chunk
+        if (chunkId === this.nextChunkId) {
+            this.appendNextChunks();
         }
+        
+        this.updateProgressUI();
     }
     
-    startPlayback() {
-        if (this.isPlaying) return;
-        this.isPlaying = true;
-        this.playNextChunk();
+    appendNextChunks() {
+        // Append all consecutive chunks starting from nextChunkId
+        while (this.chunks[this.nextChunkId]) {
+            this.queue.push(this.chunks[this.nextChunkId]);
+            delete this.chunks[this.nextChunkId];
+            this.nextChunkId++;
+        }
+        this.processQueue();
     }
     
-    playNextChunk() {
-        if (this.currentChunkIndex >= Object.keys(this.chunks).length) {
-            this.isPlaying = false;
+    processQueue() {
+        if (this.isAppending || this.queue.length === 0 || !this.sourceBuffer || this.sourceBuffer.updating) {
             return;
         }
         
-        const url = this.chunks[this.currentChunkIndex];
-        if (!url) {
-            // Chunk not ready yet, wait
-            setTimeout(() => this.playNextChunk(), 50);
-            return;
+        try {
+            this.isAppending = true;
+            const chunk = this.queue.shift();
+            this.sourceBuffer.appendBuffer(chunk);
+            
+            // Auto-play when we have enough buffered (1 second)
+            if (!this.isUserPaused && this.audioElement.paused && this.audioElement.readyState >= 2) {
+                this.audioElement.play().catch(e => console.log('Waiting for user interaction'));
+            }
+        } catch (e) {
+            console.error('Error appending buffer:', e);
+            this.isAppending = false;
+        }
+    }
+    
+    updateProgressUI() {
+        if (!this.playedBar || !this.bufferedBar || !this.timeLabel) return;
+        
+        const duration = this.audioElement.duration;
+        const currentTime = this.audioElement.currentTime;
+        
+        // Update played progress (current position)
+        if (duration && !isNaN(duration)) {
+            const playedPercent = (currentTime / duration) * 100;
+            this.playedBar.style.width = `${playedPercent}%`;
+            this.timeLabel.textContent = this.formatTime(currentTime);
         }
         
-        this.currentAudio = new Audio(url);
-        this.currentAudio.addEventListener('ended', () => {
-            URL.revokeObjectURL(url);
-            this.currentChunkIndex++;
-            this.playNextChunk();
-        });
-        this.currentAudio.addEventListener('error', (e) => {
-            console.error(`Error playing chunk ${this.currentChunkIndex}:`, e);
-            this.currentChunkIndex++;
-            this.playNextChunk();
-        });
-        
-        this.currentAudio.play().catch(e => console.error('Play error:', e));
+        // Update buffered progress (downloaded chunks)
+        const bufferedPercent = (this.nextChunkId / Math.max(this.totalChunks, this.nextChunkId + 1)) * 100;
+        this.bufferedBar.style.width = `${bufferedPercent}%`;
     }
     
-    pause() {
-        if (this.currentAudio) {
-            this.currentAudio.pause();
-            this.isPlaying = false;
+    updatePlayButtonUI(isPlaying) {
+        if (!this.playBtn) return;
+        if (isPlaying) {
+            this.playBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2h3v12H4V2zm5 0h3v12H9V2z"/></svg>';
+        } else {
+            this.playBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2l10 6-10 6V2z"/></svg>';
         }
     }
     
-    resume() {
-        if (this.currentAudio && this.currentAudio.paused) {
-            this.currentAudio.play();
-            this.isPlaying = true;
+    togglePlay() {
+        if (this.audioElement.paused) {
+            this.isUserPaused = false;
+            this.audioElement.play().catch(e => console.error('Play error:', e));
+        } else {
+            this.isUserPaused = true;
+            this.audioElement.pause();
         }
     }
     
-    stop() {
-        this.isPlaying = false;
-        if (this.currentAudio) {
-            this.currentAudio.pause();
-            this.currentAudio = null;
+    complete() {
+        this.isStreamComplete = true;
+        // End MediaSource when all chunks are appended
+        if (this.queue.length === 0 && !this.isAppending && this.mediaSource.readyState === 'open') {
+            setTimeout(() => {
+                if (this.mediaSource.readyState === 'open') {
+                    try {
+                        this.mediaSource.endOfStream();
+                    } catch (e) {
+                        console.error('Error ending stream:', e);
+                    }
+                }
+            }, 500);
         }
+    }
+    
+    formatTime(seconds) {
+        if (isNaN(seconds)) return '0:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    destroy() {
+        this.audioElement.pause();
+        if (this.mediaSource.readyState === 'open') {
+            try {
+                this.mediaSource.endOfStream();
+            } catch (e) {}
+        }
+        URL.revokeObjectURL(this.audioElement.src);
     }
 }
 
@@ -800,10 +953,8 @@ async function sendMessageRealtime(message) {
                         
                         // Create player if doesn't exist
                         if (!realtimePlayers[label]) {
-                            realtimePlayers[label] = new RealtimeAudioPlayer(label);
-                            console.log(`Created realtime player for ${label}`);
-                            
-                            // Create voice card in UI for this player
+                            // First, create voice card in UI
+                            let voiceCard = null;
                             if (messageDiv) {
                                 let voicesContainer = messageDiv.querySelector('.voices-container');
                                 if (!voicesContainer) {
@@ -812,9 +963,9 @@ async function sendMessageRealtime(message) {
                                     messageDiv.appendChild(voicesContainer);
                                 }
                                 
-                                // Create voice card
-                                const voiceCard = document.createElement('div');
-                                voiceCard.className = 'voice-card streaming';
+                                // Create voice card with header
+                                voiceCard = document.createElement('div');
+                                voiceCard.className = 'voice-card';
                                 voiceCard.dataset.label = label;
                                 
                                 const header = document.createElement('div');
@@ -822,24 +973,29 @@ async function sendMessageRealtime(message) {
                                 const labelText = label === 'a' ? (modelA || 'Voice A') : (modelB || 'Voice B');
                                 header.innerHTML = `<span class="voice-label">${labelText}</span>`;
                                 
-                                const statusDiv = document.createElement('div');
-                                statusDiv.className = 'streaming-status';
-                                statusDiv.textContent = '🎵 Streaming...';
-                                statusDiv.style.cssText = 'font-size: 12px; color: #666; margin-top: 8px;';
-                                
                                 voiceCard.appendChild(header);
-                                voiceCard.appendChild(statusDiv);
                                 voicesContainer.appendChild(voiceCard);
                                 
                                 console.log(`Voice card created for ${label}`);
                             }
+                            
+                            // Create progressive audio player with the voice card
+                            realtimePlayers[label] = new ProgressiveAudioPlayer(label, voiceCard);
+                            console.log(`Created progressive player for ${label}`);
                         }
                         
-                        // Add chunk to player (will start playing when buffer full)
+                        // Add chunk to player (progressive loading like YouTube)
                         realtimePlayers[label].addChunk(chunkId, hexData);
                         
                     } else if (data.type === 'metadata') {
                         shouldVote = data.should_vote;
+                        
+                        // Signal completion to all players
+                        Object.values(realtimePlayers).forEach(player => {
+                            if (player && player.complete) {
+                                player.complete();
+                            }
+                        });
                     } else if (data.type === 'error') {
                         console.error('Server error:', data.message);
                     }
