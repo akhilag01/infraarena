@@ -221,25 +221,36 @@ async def start_session(authorization: str = Header(None)):
             print(f"Error getting user from token: {e}")
             pass
     
+    session_data = {
+        'session_id': session_id,
+        'model_a_id': selected_models[0]['id'],
+        'model_b_id': selected_models[1]['id'],
+        'messages': [],
+        'prompt_count': 0,
+        'user_id': user_id,
+        'title': 'New Chat'
+    }
+    
+    print(f"Creating session with data: {session_data}")
+    
     try:
-        session_data = {
-            'session_id': session_id,
-            'model_a_id': selected_models[0]['id'],
-            'model_b_id': selected_models[1]['id'],
-            'messages': [],
-            'prompt_count': 0,
-            'user_id': user_id,
-            'title': 'New Chat'
-        }
-        
-        print(f"Creating session with data: {session_data}")
         result = supabase.table('sessions').insert(session_data).execute()
         print(f"Session created successfully: {result.data}")
+        
+        if not result.data:
+            raise Exception("Insert returned no data - possible RLS policy blocking")
+            
     except Exception as e:
-        print(f"Error creating session: {e}")
+        error_msg = str(e)
+        print(f"Error creating session: {error_msg}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to create session: {str(e)}")
+        
+        # Check if it's an RLS error
+        if "policy" in error_msg.lower() or "permission" in error_msg.lower():
+            raise HTTPException(status_code=500, detail="Database permission error - RLS policy may be blocking. Please disable RLS on sessions table.")
+        else:
+            raise HTTPException(status_code=500, detail=f"Failed to create session: {error_msg}")
     
     return {
         "session_id": session_id,
