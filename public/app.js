@@ -956,6 +956,12 @@ async function sendMessageRealtime(message) {
                         modelB = data.model_b;
                         console.log('Received model_info:', modelA, modelB);
                         
+                        // Create messageDiv if it doesn't exist yet
+                        if (!messageDiv) {
+                            placeholder.remove();
+                            messageDiv = addMessage('', false); // Empty message for now
+                        }
+                        
                         // Create voice cards immediately when we know the models
                         if (messageDiv && currentMode !== 'direct') {
                             let voicesContainer = messageDiv.querySelector('.voices-container');
