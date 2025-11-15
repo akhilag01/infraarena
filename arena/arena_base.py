@@ -203,6 +203,8 @@ class ArenaBase(Generic[TInput, TOutput]):
         Returns:
             Tuple of (chain_a, chain_b) selected for matchup
         """
+
+        # TODO: Incoprorate individual model ElOs into matchup generation
         return self.matchup_generator.generate_matchup(
             self.model_chains, self.chain_elos
         )
