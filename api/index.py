@@ -4,9 +4,11 @@ import uuid
 import io
 import httpx
 import asyncio
+import json
 from typing import Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from openai import OpenAI
 from elevenlabs import ElevenLabs
@@ -304,36 +306,52 @@ async def chat(request: ChatRequest):
     assistant_message = response.choices[0].message.content
     messages.append({"role": "assistant", "content": assistant_message})
     
-    # Generate TTS audio in parallel for faster response
-    tts_service = get_tts_service()
-    audio_a, audio_b = await asyncio.gather(
-        tts_service.generate_speech(assistant_message, selected_models[0]['name']),
-        tts_service.generate_speech(assistant_message, selected_models[1]['name'])
-    )
+    async def stream_response():
+        # Send text immediately
+        yield json.dumps({"type": "text", "content": assistant_message}) + "\n"
+        
+        # Generate TTS audio in parallel and stream as they complete
+        tts_service = get_tts_service()
+        tasks = {
+            'audio_a': asyncio.create_task(tts_service.generate_speech(assistant_message, selected_models[0]['name'])),
+            'audio_b': asyncio.create_task(tts_service.generate_speech(assistant_message, selected_models[1]['name']))
+        }
+        
+        # Stream whichever audio finishes first
+        pending = set(tasks.values())
+        task_names = {v: k for k, v in tasks.items()}
+        
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                audio_data = await task
+                audio_key = task_names[task]
+                yield json.dumps({"type": audio_key, "content": audio_data.hex()}) + "\n"
+        
+        # Update session in Supabase
+        new_prompt_count = session.get('prompt_count', 0) + 1
+        update_data = {
+            'messages': messages,
+            'prompt_count': new_prompt_count,
+            'model_a_id': selected_models[0]['id'],
+            'model_b_id': selected_models[1]['id']
+        }
+        
+        # Set title to first message if this is the first prompt
+        if new_prompt_count == 1:
+            title = request.message[:50] + ('...' if len(request.message) > 50 else '')
+            update_data['title'] = title
+        
+        supabase.table('sessions').update(update_data).eq('session_id', request.session_id).execute()
+        
+        # Send metadata
+        yield json.dumps({
+            "type": "metadata",
+            "prompt_count": new_prompt_count,
+            "should_vote": True
+        }) + "\n"
     
-    # Update session in Supabase
-    new_prompt_count = session.get('prompt_count', 0) + 1
-    update_data = {
-        'messages': messages,
-        'prompt_count': new_prompt_count,
-        'model_a_id': selected_models[0]['id'],
-        'model_b_id': selected_models[1]['id']
-    }
-    
-    # Set title to first message if this is the first prompt
-    if new_prompt_count == 1:
-        title = request.message[:50] + ('...' if len(request.message) > 50 else '')
-        update_data['title'] = title
-    
-    supabase.table('sessions').update(update_data).eq('session_id', request.session_id).execute()
-    
-    return {
-        "text": assistant_message,
-        "audio_a": audio_a.hex(),
-        "audio_b": audio_b.hex(),
-        "prompt_count": new_prompt_count,
-        "should_vote": True
-    }
+    return StreamingResponse(stream_response(), media_type="application/x-ndjson")
 
 @app.post("/api/vote")
 async def vote(request: VoteRequest):

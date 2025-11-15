@@ -263,15 +263,51 @@ async function sendMessage(message) {
             body: JSON.stringify({ session_id: sessionId, message })
         });
         
-        const data = await response.json();
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
         
-        placeholder.remove();
+        let textContent = '';
+        let audioA = null;
+        let audioB = null;
+        let shouldVote = false;
+        let messageDiv = null;
         
-        addMessage(data.text, false, data.audio_a, data.audio_b);
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n').filter(line => line.trim());
+            
+            for (const line of lines) {
+                try {
+                    const data = JSON.parse(line);
+                    
+                    if (data.type === 'text') {
+                        textContent = data.content;
+                        placeholder.remove();
+                        messageDiv = addMessage(textContent, false);
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                    } else if (data.type === 'audio_a') {
+                        audioA = data.content;
+                        if (messageDiv && audioA && audioB) {
+                            updateMessageWithAudio(messageDiv, textContent, audioA, audioB);
+                        }
+                    } else if (data.type === 'audio_b') {
+                        audioB = data.content;
+                        if (messageDiv && audioA && audioB) {
+                            updateMessageWithAudio(messageDiv, textContent, audioA, audioB);
+                        }
+                    } else if (data.type === 'metadata') {
+                        shouldVote = data.should_vote;
+                    }
+                } catch (e) {
+                    console.error('Error parsing stream chunk:', e);
+                }
+            }
+        }
         
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-        
-        if (data.should_vote) {
+        if (shouldVote) {
             showVotePrompt();
         }
         
@@ -283,6 +319,30 @@ async function sendMessage(message) {
         placeholder.remove();
         addMessage('Sorry, there was an error. Please try again.', false);
     }
+}
+
+function updateMessageWithAudio(messageDiv, text, audioA, audioB) {
+    messageDiv.innerHTML = '';
+    
+    const textDiv = document.createElement('div');
+    textDiv.className = 'message-text';
+    textDiv.textContent = text;
+    messageDiv.appendChild(textDiv);
+    
+    const voicesContainer = document.createElement('div');
+    voicesContainer.className = 'voices-container';
+    
+    const voiceCardA = createVoiceCard('A', audioA);
+    const voiceCardB = createVoiceCard('B', audioB);
+    
+    currentVoiceCards.voiceA = voiceCardA;
+    currentVoiceCards.voiceB = voiceCardB;
+    
+    voicesContainer.appendChild(voiceCardA);
+    voicesContainer.appendChild(voiceCardB);
+    messageDiv.appendChild(voicesContainer);
+    
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 async function submitVote(winner) {
