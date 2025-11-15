@@ -99,22 +99,28 @@ class TTSService:
         if _elevenlabs_client is None:
             _elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
         
-        audio_generator = _elevenlabs_client.text_to_speech.convert(
-            text=text,
-            voice_id="EXAVITQu4vr4xnSDxMaL",
-            model_id="eleven_turbo_v2_5" if model == "eleven_v3" else model,
-            voice_settings={
-                "stability": 0.5,
-                "similarity_boost": 0.75,
-                "style": 0.0,
-                "use_speaker_boost": True
-            }
-        )
+        # Run synchronous ElevenLabs API in executor to avoid blocking
+        def generate_audio():
+            audio_generator = _elevenlabs_client.text_to_speech.convert(
+                text=text,
+                voice_id="EXAVITQu4vr4xnSDxMaL",
+                model_id="eleven_turbo_v2_5" if model == "eleven_v3" else model,
+                voice_settings={
+                    "stability": 0.5,
+                    "similarity_boost": 0.75,
+                    "style": 0.0,
+                    "use_speaker_boost": True
+                }
+            )
+            
+            audio_bytes = b""
+            for chunk in audio_generator:
+                audio_bytes += chunk
+            return audio_bytes
         
-        audio_bytes = b""
-        for chunk in audio_generator:
-            audio_bytes += chunk
-        return audio_bytes
+        # Run in thread pool to avoid blocking event loop
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, generate_audio)
     
     async def _deepgram_tts(self, text: str) -> bytes:
         async with httpx.AsyncClient() as client:
