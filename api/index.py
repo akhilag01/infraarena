@@ -153,6 +153,12 @@ class TTSService:
 # Initialize app
 app = FastAPI(title="Voice Arena")
 
+# Log startup
+print("=" * 80)
+print("VOICE ARENA API STARTING UP")
+print(f"TTSModelName enum imported successfully: {TTSModelName}")
+print("=" * 80)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -201,9 +207,18 @@ async def health():
 
 @app.post("/api/start-session")
 async def start_session(authorization: str = Header(None)):
+    print("=" * 50)
+    print("START SESSION REQUEST RECEIVED")
+    print("=" * 50)
+    
     supabase = get_supabase()
+    print(f"Supabase client initialized: {supabase is not None}")
+    
     models = get_models()
+    print(f"Fetched {len(models)} models from database")
+    
     if len(models) < 2:
+        print("ERROR: Not enough TTS models available")
         raise HTTPException(status_code=500, detail="Not enough TTS models available")
     
     selected_models = random.sample(models, 2)
