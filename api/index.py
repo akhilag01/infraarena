@@ -326,19 +326,27 @@ async def chat(request: ChatRequest):
     messages = session.get('messages', [])
     messages.append({"role": "user", "content": request.message})
     
-    # Generate AI response
+    # Generate AI response with streaming
     openai_client = get_openai_client()
-    response = openai_client.chat.completions.create(
-        model="gpt-4",
-        messages=messages
-    )
-    
-    assistant_message = response.choices[0].message.content
-    messages.append({"role": "assistant", "content": assistant_message})
     
     async def stream_response():
-        # Send text immediately
+        # Stream text response from OpenAI
+        assistant_message = ""
+        stream = openai_client.chat.completions.create(
+            model="gpt-4",
+            messages=messages,
+            stream=True
+        )
+        
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                content = chunk.choices[0].delta.content
+                assistant_message += content
+                yield json.dumps({"type": "text_delta", "content": content}) + "\n"
+        
+        # Send complete text
         yield json.dumps({"type": "text", "content": assistant_message}) + "\n"
+        messages.append({"role": "assistant", "content": assistant_message})
         
         # Send model info first so frontend knows which models are being used
         if mode == 'direct':

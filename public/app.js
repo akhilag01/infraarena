@@ -321,10 +321,24 @@ async function sendMessage(message) {
                 try {
                     const data = JSON.parse(line);
                     
-                    if (data.type === 'text') {
+                    if (data.type === 'text_delta') {
+                        textContent += data.content;
+                        if (!messageDiv) {
+                            placeholder.remove();
+                            messageDiv = addMessage(textContent, false);
+                        } else {
+                            const textDiv = messageDiv.querySelector('.message-text');
+                            if (textDiv) {
+                                textDiv.textContent = textContent;
+                            }
+                        }
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                    } else if (data.type === 'text') {
                         textContent = data.content;
-                        placeholder.remove();
-                        messageDiv = addMessage(textContent, false);
+                        if (!messageDiv) {
+                            placeholder.remove();
+                            messageDiv = addMessage(textContent, false);
+                        }
                         chatMessages.scrollTop = chatMessages.scrollHeight;
                     } else if (data.type === 'audio_a') {
                         audioA = data.content;
@@ -370,7 +384,21 @@ async function sendMessage(message) {
 }
 
 function updateMessageWithAudio(messageDiv, text, audioA, audioB, modelA, modelB) {
-    console.log('updateMessageWithAudio called:', { mode: currentMode, audioA: !!audioA, audioB: !!audioB, modelA, modelB });
+    console.log('updateMessageWithAudio called:', { 
+        mode: currentMode, 
+        audioA: !!audioA, 
+        audioB: !!audioB, 
+        modelA, 
+        modelB,
+        messageDivExists: !!messageDiv,
+        messageDivInDOM: messageDiv && document.body.contains(messageDiv)
+    });
+    
+    if (!messageDiv || !document.body.contains(messageDiv)) {
+        console.error('messageDiv is null or not in DOM!');
+        return;
+    }
+    
     messageDiv.innerHTML = '';
     
     const textDiv = document.createElement('div');
@@ -380,30 +408,39 @@ function updateMessageWithAudio(messageDiv, text, audioA, audioB, modelA, modelB
     
     if (currentMode !== 'direct' && audioA && audioB) {
         console.log('Creating voice cards for battle/side-by-side');
-        const voicesContainer = document.createElement('div');
-        voicesContainer.className = 'voices-container';
-        
-        const voiceCardA = createVoiceCard('A', audioA, modelA);
-        currentVoiceCards.voiceA = voiceCardA;
-        voicesContainer.appendChild(voiceCardA);
-        
-        const voiceCardB = createVoiceCard('B', audioB, modelB);
-        currentVoiceCards.voiceB = voiceCardB;
-        voicesContainer.appendChild(voiceCardB);
-        
-        messageDiv.appendChild(voicesContainer);
-        console.log('Voice cards added to message');
+        try {
+            const voicesContainer = document.createElement('div');
+            voicesContainer.className = 'voices-container';
+            
+            const voiceCardA = createVoiceCard('A', audioA, modelA);
+            currentVoiceCards.voiceA = voiceCardA;
+            voicesContainer.appendChild(voiceCardA);
+            
+            const voiceCardB = createVoiceCard('B', audioB, modelB);
+            currentVoiceCards.voiceB = voiceCardB;
+            voicesContainer.appendChild(voiceCardB);
+            
+            messageDiv.appendChild(voicesContainer);
+            console.log('Voice cards added to message, voicesContainer children:', voicesContainer.children.length);
+            console.log('Message div HTML after adding voices:', messageDiv.innerHTML.substring(0, 200));
+        } catch (error) {
+            console.error('Error creating voice cards:', error);
+        }
     } else if (currentMode === 'direct' && audioA) {
         console.log('Creating voice card for direct mode');
-        const voicesContainer = document.createElement('div');
-        voicesContainer.className = 'voices-container';
-        
-        const voiceCardA = createVoiceCard('A', audioA, modelA);
-        currentVoiceCards.voiceA = voiceCardA;
-        voicesContainer.appendChild(voiceCardA);
-        
-        messageDiv.appendChild(voicesContainer);
-        console.log('Voice card added to message');
+        try {
+            const voicesContainer = document.createElement('div');
+            voicesContainer.className = 'voices-container';
+            
+            const voiceCardA = createVoiceCard('A', audioA, modelA);
+            currentVoiceCards.voiceA = voiceCardA;
+            voicesContainer.appendChild(voiceCardA);
+            
+            messageDiv.appendChild(voicesContainer);
+            console.log('Voice card added to message');
+        } catch (error) {
+            console.error('Error creating voice card:', error);
+        }
     } else {
         console.log('Conditions not met for voice cards:', { currentMode, audioA: !!audioA, audioB: !!audioB });
     }
