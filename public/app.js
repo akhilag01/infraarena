@@ -1280,5 +1280,6 @@ initCustomSelect(headerModelSelectSingle, (modelId) => {
     startSession();
 });
 
-startSession();
+// Initialize with battle mode
+switchMode('battle');
 updateActiveNav(navChat);
