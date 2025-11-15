@@ -1,17 +1,10 @@
 from typing import Generic, TypeVar, Protocol, Callable
 from enum import Enum
-from arena.elo import calculate_team_elo_from_vote, calculate_elo_from_vote
+from arena.elo import calculate_team_elo_from_vote, calculate_elo_from_vote, VoteOutcome
 from arena.matchup import MatchupGenerator
 
 TInput = TypeVar("TInput")
 TOutput = TypeVar("TOutput")
-
-
-class VoteOutcome(Enum):
-    A = "A"
-    B = "B"
-    TIE = "tie"
-    BOTH_BAD = "both_bad"
 
 
 class TTSModelName(str, Enum):

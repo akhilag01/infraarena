@@ -1,4 +1,11 @@
-from arena.arena_base import VoteOutcome
+from enum import Enum
+
+
+class VoteOutcome(Enum):
+    A = "A"
+    B = "B"
+    TIE = "tie"
+    BOTH_BAD = "both_bad"
 
 
 # ELO calculation functions
