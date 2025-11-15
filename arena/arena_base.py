@@ -1,6 +1,7 @@
 from typing import Generic, TypeVar, Protocol, Callable
 from enum import Enum
 from arena.elo import calculate_team_elo_from_vote, calculate_elo_from_vote
+from arena.matchup import MatchupGenerator
 
 TInput = TypeVar("TInput")
 TOutput = TypeVar("TOutput")
@@ -113,6 +114,8 @@ class ArenaBase(Generic[TInput, TOutput]):
         self,
         model_chains: list[ModelChain[TInput, TOutput]],
         initial_elo: float = 1500.0,
+        matchup_temperature: float = 400.0,
+        recency_penalty: float = 0.3,
     ):
         """
         Initialize the arena.
@@ -120,6 +123,8 @@ class ArenaBase(Generic[TInput, TOutput]):
         Args:
             model_chains: List of model chains to include in the arena
             initial_elo: Initial ELO rating for all models (default: 1500.0)
+            matchup_temperature: Controls matchup randomness (higher = more random)
+            recency_penalty: Penalty for recent matchups (0-1, higher = stronger penalty)
         """
         self.model_chains = model_chains
 
@@ -136,6 +141,12 @@ class ArenaBase(Generic[TInput, TOutput]):
         self.chain_elos: dict[ModelChain[TInput, TOutput], float] = {
             chain: initial_elo for chain in model_chains
         }
+
+        # Initialize matchup generator for intelligent pairing
+        self.matchup_generator = MatchupGenerator[ModelChain[TInput, TOutput]](
+            temperature=matchup_temperature,
+            recency_penalty=recency_penalty,
+        )
 
     # === Voting and ELO Management ===
     def record_vote(
@@ -182,8 +193,19 @@ class ArenaBase(Generic[TInput, TOutput]):
     def generate_matchup(
         self,
     ) -> tuple[ModelChain[TInput, TOutput], ModelChain[TInput, TOutput]]:
-        """Generate a matchup between two models."""
-        raise NotImplementedError
+        """
+        Generate a matchup between two model chains.
+
+        Uses ELO-weighted sampling with recency penalty to balance:
+        - Exploitation: Higher-ELO chains appear more frequently
+        - Exploration: All matchups get tried, recent ones penalized
+
+        Returns:
+            Tuple of (chain_a, chain_b) selected for matchup
+        """
+        return self.matchup_generator.generate_matchup(
+            self.model_chains, self.chain_elos
+        )
 
     def generate_output(
         self,
@@ -257,3 +279,14 @@ class ArenaBase(Generic[TInput, TOutput]):
             KeyError: If chain is not found in the arena
         """
         return self.chain_elos[chain]
+
+    def get_matchup_stats(
+        self,
+    ) -> dict[tuple[ModelChain[TInput, TOutput], ModelChain[TInput, TOutput]], int]:
+        """
+        Get statistics on how many times each matchup has occurred.
+
+        Returns:
+            Dictionary mapping matchup pairs to occurrence counts
+        """
+        return self.matchup_generator.get_matchup_stats()
