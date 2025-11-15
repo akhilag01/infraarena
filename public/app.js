@@ -319,10 +319,8 @@ class ProgressiveAudioPlayer {
             const chunk = this.queue.shift();
             this.sourceBuffer.appendBuffer(chunk);
             
-            // Auto-play when we have enough buffered (1 second)
-            if (!this.isUserPaused && this.audioElement.paused && this.audioElement.readyState >= 2) {
-                this.audioElement.play().catch(e => console.log('Waiting for user interaction'));
-            }
+            // Don't auto-play - let user click play button
+            // (Browser security requires user interaction for auto-play)
         } catch (e) {
             console.error('Error appending buffer:', e);
             this.isAppending = false;
@@ -975,6 +973,10 @@ async function sendMessageRealtime(message) {
                                 voicesContainer.appendChild(voiceCardA);
                                 voicesContainer.appendChild(voiceCardB);
                                 
+                                // Update global reference for voting
+                                currentVoiceCards.voiceA = voiceCardA;
+                                currentVoiceCards.voiceB = voiceCardB;
+                                
                                 console.log('Voice cards created for both models');
                             }
                         } else if (messageDiv && currentMode === 'direct') {
@@ -995,6 +997,10 @@ async function sendMessageRealtime(message) {
                                 
                                 voicesContainer.appendChild(voiceCardA);
                                 
+                                // Update global reference
+                                currentVoiceCards.voiceA = voiceCardA;
+                                currentVoiceCards.voiceB = null;
+                                
                                 console.log('Voice card created for direct mode');
                             }
                         }
@@ -1005,6 +1011,8 @@ async function sendMessageRealtime(message) {
                         const chunkId = data.chunk_id;
                         const hexData = data.data;
                         
+                        console.log(`Received audio_chunk: label=${label}, chunkId=${chunkId}, dataLength=${hexData?.length}`);
+                        
                         // Create player if doesn't exist
                         if (!realtimePlayers[label]) {
                             // Find the existing voice card
@@ -1013,16 +1021,18 @@ async function sendMessageRealtime(message) {
                                 const voicesContainer = messageDiv.querySelector('.voices-container');
                                 if (voicesContainer) {
                                     voiceCard = voicesContainer.querySelector(`[data-label="${label}"]`);
+                                    console.log(`Found voice card for ${label}:`, !!voiceCard);
                                 }
                             }
                             
                             // Create progressive audio player with the voice card
                             realtimePlayers[label] = new ProgressiveAudioPlayer(label, voiceCard);
-                            console.log(`Created progressive player for ${label}`);
+                            console.log(`Created progressive player for ${label} with voiceCard:`, !!voiceCard);
                         }
                         
                         // Add chunk to player (progressive loading like YouTube)
                         realtimePlayers[label].addChunk(chunkId, hexData);
+                        console.log(`Added chunk ${chunkId} to player ${label}`);
                         
                     } else if (data.type === 'metadata') {
                         shouldVote = data.should_vote;
