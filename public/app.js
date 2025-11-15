@@ -186,6 +186,7 @@ class ProgressiveAudioPlayer {
         
         this.mediaSource.addEventListener('sourceopen', () => {
             try {
+                console.log(`[Player ${this.label}] MediaSource opened, creating SourceBuffer`);
                 this.sourceBuffer = this.mediaSource.addSourceBuffer('audio/mpeg');
                 this.sourceBuffer.mode = 'sequence';
                 
@@ -196,10 +197,16 @@ class ProgressiveAudioPlayer {
                 });
                 
                 this.sourceBuffer.addEventListener('error', (e) => {
-                    console.error('SourceBuffer error:', e);
+                    console.error(`[Player ${this.label}] SourceBuffer error:`, e);
                 });
+                
+                // Try to append any chunks that arrived early
+                if (this.chunks[this.nextChunkId]) {
+                    console.log(`[Player ${this.label}] Processing early chunks`);
+                    this.appendNextChunks();
+                }
             } catch (e) {
-                console.error('Error creating SourceBuffer:', e);
+                console.error(`[Player ${this.label}] Error creating SourceBuffer:`, e);
             }
         });
         
@@ -284,19 +291,25 @@ class ProgressiveAudioPlayer {
     }
     
     addChunk(chunkId, hexData) {
-        // Store chunk
-        const bytes = new Uint8Array(hexData.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-        this.chunks[chunkId] = bytes;
-        
-        // Update total chunks estimate
-        this.totalChunks = Math.max(this.totalChunks, chunkId + 1);
-        
-        // Try to append if it's the next expected chunk
-        if (chunkId === this.nextChunkId) {
-            this.appendNextChunks();
+        try {
+            // Store chunk
+            const bytes = new Uint8Array(hexData.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+            this.chunks[chunkId] = bytes;
+            
+            // Update total chunks estimate
+            this.totalChunks = Math.max(this.totalChunks, chunkId + 1);
+            
+            console.log(`[Player ${this.label}] Stored chunk ${chunkId}, total chunks: ${this.totalChunks}, sourceBuffer ready: ${!!this.sourceBuffer}`);
+            
+            // Try to append if it's the next expected chunk AND sourceBuffer is ready
+            if (chunkId === this.nextChunkId && this.sourceBuffer) {
+                this.appendNextChunks();
+            }
+            
+            this.updateProgressUI();
+        } catch (e) {
+            console.error(`[Player ${this.label}] Error adding chunk ${chunkId}:`, e);
         }
-        
-        this.updateProgressUI();
     }
     
     appendNextChunks() {

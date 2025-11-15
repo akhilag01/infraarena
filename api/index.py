@@ -639,6 +639,21 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                 tts_tasks.append(asyncio.create_task(tts_worker(selected_models[1]['name'], 'b', sentence_queues['b'])))
                 print(f"[Main] Started 2 workers: a={selected_models[0]['name']}, b={selected_models[1]['name']}")
             
+            # Send model info FIRST before any audio chunks
+            if request.mode == 'direct':
+                yield json.dumps({
+                    "type": "model_info",
+                    "model_a": selected_models[0].get('display_name') or selected_models[0]['name']
+                }) + "\n"
+            else:
+                yield json.dumps({
+                    "type": "model_info",
+                    "model_a": selected_models[0].get('display_name') or selected_models[0]['name'],
+                    "model_b": selected_models[1].get('display_name') or selected_models[1]['name']
+                }) + "\n"
+            
+            print("[Main] Sent model_info to client")
+            
             # Stream LLM tokens and extract sentences
             stream = openai_client.chat.completions.create(
                 model="gpt-4",
@@ -696,19 +711,6 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
             # Send complete text
             yield json.dumps({"type": "text", "content": assistant_message}) + "\n"
             messages.append({"role": "assistant", "content": assistant_message})
-            
-            # Send model info
-            if request.mode == 'direct':
-                yield json.dumps({
-                    "type": "model_info",
-                    "model_a": selected_models[0].get('display_name') or selected_models[0]['name']
-                }) + "\n"
-            else:
-                yield json.dumps({
-                    "type": "model_info",
-                    "model_a": selected_models[0].get('display_name') or selected_models[0]['name'],
-                    "model_b": selected_models[1].get('display_name') or selected_models[1]['name']
-                }) + "\n"
             
             # Wait for all TTS workers to complete
             print(f"[Main] Waiting for {len(tts_tasks)} workers to complete...")
