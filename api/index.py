@@ -340,16 +340,25 @@ async def chat(request: ChatRequest):
         # Send text immediately
         yield json.dumps({"type": "text", "content": assistant_message}) + "\n"
         
+        # Send model info first so frontend knows which models are being used
+        if mode == 'direct':
+            yield json.dumps({
+                "type": "model_info",
+                "model_a": selected_models[0].get('display_name') or selected_models[0]['name']
+            }) + "\n"
+        else:
+            yield json.dumps({
+                "type": "model_info",
+                "model_a": selected_models[0].get('display_name') or selected_models[0]['name'],
+                "model_b": selected_models[1].get('display_name') or selected_models[1]['name']
+            }) + "\n"
+        
         # Generate TTS audio
         tts_service = get_tts_service()
         
         if mode == 'direct':
             audio = await tts_service.generate_speech(assistant_message, selected_models[0]['name'])
             yield json.dumps({"type": "audio_a", "content": audio.hex()}) + "\n"
-            yield json.dumps({
-                "type": "model_info",
-                "model_a": selected_models[0].get('display_name') or selected_models[0]['name']
-            }) + "\n"
         else:
             tasks = {
                 'audio_a': asyncio.create_task(tts_service.generate_speech(assistant_message, selected_models[0]['name'])),
@@ -365,13 +374,6 @@ async def chat(request: ChatRequest):
                     audio_data = await task
                     audio_key = task_names[task]
                     yield json.dumps({"type": audio_key, "content": audio_data.hex()}) + "\n"
-            
-            # Send model info for both battle and side-by-side modes
-            yield json.dumps({
-                "type": "model_info",
-                "model_a": selected_models[0].get('display_name') or selected_models[0]['name'],
-                "model_b": selected_models[1].get('display_name') or selected_models[1]['name']
-            }) + "\n"
         
         # Update session in Supabase
         new_prompt_count = session.get('prompt_count', 0) + 1
