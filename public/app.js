@@ -231,6 +231,103 @@ function addGeneratingPlaceholder() {
     return messageDiv;
 }
 
+function createStreamingVoiceCard(label, audioPlayer, modelName) {
+    console.log('createStreamingVoiceCard called:', { label, hasPlayer: !!audioPlayer, modelName });
+    
+    const card = document.createElement('div');
+    card.className = 'voice-card';
+    card.dataset.label = label;
+    
+    const header = document.createElement('div');
+    header.className = 'voice-card-header';
+    const labelText = modelName && currentMode === 'side-by-side' ? modelName : `Voice ${label}`;
+    header.innerHTML = `<span class="voice-label">${labelText}</span>`;
+    if (modelName) {
+        header.innerHTML += `<span class="model-name">${modelName}</span>`;
+    }
+    
+    const controls = document.createElement('div');
+    controls.className = 'voice-controls';
+    
+    const playBtn = document.createElement('button');
+    playBtn.className = 'play-btn';
+    playBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2l10 6-10 6V2z"/></svg>`;
+    
+    const progressContainer = document.createElement('div');
+    progressContainer.className = 'progress-container';
+    
+    const progressBar = document.createElement('div');
+    progressBar.className = 'progress-bar';
+    
+    const progress = document.createElement('div');
+    progress.className = 'progress';
+    
+    progressBar.appendChild(progress);
+    progressContainer.appendChild(progressBar);
+    
+    const timeLabel = document.createElement('span');
+    timeLabel.className = 'time-label';
+    timeLabel.textContent = '0:00';
+    
+    let isPlaying = false;
+    
+    if (audioPlayer) {
+        playBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                audioPlayer.pause();
+                playBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2l10 6-10 6V2z"/></svg>`;
+            } else {
+                audioPlayer.play().catch(e => console.error('Play error:', e));
+                playBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12"/><rect x="9" y="2" width="4" height="12"/></svg>`;
+            }
+            isPlaying = !isPlaying;
+        });
+        
+        audioPlayer.addEventListener('timeupdate', () => {
+            const currentTime = audioPlayer.getCurrentTime();
+            const duration = audioPlayer.getDuration();
+            if (duration && !isNaN(duration)) {
+                const percentage = (currentTime / duration) * 100;
+                progress.style.width = `${percentage}%`;
+                timeLabel.textContent = formatTime(currentTime);
+            }
+        });
+        
+        audioPlayer.addEventListener('ended', () => {
+            isPlaying = false;
+            playBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2l10 6-10 6V2z"/></svg>`;
+            progress.style.width = '0%';
+        });
+        
+        audioPlayer.addEventListener('loadedmetadata', () => {
+            const duration = audioPlayer.getDuration();
+            if (duration && !isNaN(duration)) {
+                timeLabel.textContent = formatTime(duration);
+            }
+        });
+        
+        progressContainer.addEventListener('click', (e) => {
+            const rect = progressBar.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const percentage = x / rect.width;
+            const duration = audioPlayer.getDuration();
+            if (duration && !isNaN(duration)) {
+                audioPlayer.seek(percentage * duration);
+            }
+        });
+    }
+    
+    controls.appendChild(playBtn);
+    controls.appendChild(progressContainer);
+    controls.appendChild(timeLabel);
+    
+    card.appendChild(header);
+    card.appendChild(controls);
+    
+    console.log('Streaming voice card created successfully');
+    return card;
+}
+
 function createVoiceCard(label, audioHex, modelName) {
     console.log('createVoiceCard called:', { label, audioHex: audioHex ? audioHex.substring(0, 50) + '...' : null, modelName });
     
@@ -483,7 +580,31 @@ async function sendMessage(message) {
                         const chunkData = data.chunk;
                         
                         if (!audioPlayers[audioId]) {
+                            console.log('Creating new audio player for:', audioId);
                             audioPlayers[audioId] = new StreamingAudioPlayer();
+                        }
+                        
+                        // Create/update voice cards
+                        if (messageDiv) {
+                            let voicesContainer = messageDiv.querySelector('.voices-container');
+                            
+                            if (!voicesContainer) {
+                                voicesContainer = document.createElement('div');
+                                voicesContainer.className = 'voices-container';
+                                messageDiv.appendChild(voicesContainer);
+                            }
+                            
+                            // Check if voice card for this audio ID already exists
+                            const existingCard = voicesContainer.querySelector(`[data-audio-id="${audioId}"]`);
+                            
+                            if (!existingCard) {
+                                const label = audioId === 'a' ? 'A' : 'B';
+                                const model = audioId === 'a' ? modelA : modelB;
+                                const voiceCard = createStreamingVoiceCard(label, audioPlayers[audioId], model);
+                                voiceCard.dataset.audioId = audioId;
+                                voicesContainer.appendChild(voiceCard);
+                                console.log(`Voice card created for ${audioId}`);
+                            }
                         }
                         
                         // Decode base64 to binary
