@@ -3,6 +3,7 @@ import random
 import uuid
 import io
 import httpx
+import asyncio
 from typing import Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -303,10 +304,12 @@ async def chat(request: ChatRequest):
     assistant_message = response.choices[0].message.content
     messages.append({"role": "assistant", "content": assistant_message})
     
-    # Generate TTS audio
+    # Generate TTS audio in parallel for faster response
     tts_service = get_tts_service()
-    audio_a = await tts_service.generate_speech(assistant_message, selected_models[0]['name'])
-    audio_b = await tts_service.generate_speech(assistant_message, selected_models[1]['name'])
+    audio_a, audio_b = await asyncio.gather(
+        tts_service.generate_speech(assistant_message, selected_models[0]['name']),
+        tts_service.generate_speech(assistant_message, selected_models[1]['name'])
+    )
     
     # Update session in Supabase
     new_prompt_count = session.get('prompt_count', 0) + 1
