@@ -487,6 +487,9 @@ header h1 {
     height: 20px;
     object-fit: contain;
     flex-shrink: 0;
+    background: white;
+    border-radius: 50%;
+    padding: 2px;
 }
 
 .custom-option-text {
@@ -498,6 +501,9 @@ header h1 {
     height: 20px;
     object-fit: contain;
     flex-shrink: 0;
+    background: white;
+    border-radius: 50%;
+    padding: 2px;
 }
 
 .header-login-btn {

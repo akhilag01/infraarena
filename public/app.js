@@ -348,20 +348,31 @@ async function sendMessage(message) {
                         }
                         chatMessages.scrollTop = chatMessages.scrollHeight;
                     } else if (data.type === 'audio_a') {
+                        console.log('=== AUDIO_A RECEIVED ===');
+                        console.log('Audio A length:', data.content ? data.content.length : 0);
                         audioA = data.content;
-                        console.log('Received audio_a, mode:', currentMode, 'has audioB:', !!audioB, 'has messageDiv:', !!messageDiv);
+                        console.log('Current state - mode:', currentMode, 'audioB:', !!audioB, 'messageDiv:', !!messageDiv, 'modelA:', modelA, 'modelB:', modelB);
+                        
                         if (currentMode === 'direct' && messageDiv) {
+                            console.log('Calling updateMessageWithAudio for DIRECT mode');
                             updateMessageWithAudio(messageDiv, textContent, audioA, null, modelA, modelB);
                         } else if (messageDiv && audioB) {
-                            console.log('Calling updateMessageWithAudio with both audios');
+                            console.log('Calling updateMessageWithAudio with BOTH audios');
                             updateMessageWithAudio(messageDiv, textContent, audioA, audioB, modelA, modelB);
+                        } else {
+                            console.log('NOT calling updateMessageWithAudio yet - waiting for audioB');
                         }
                     } else if (data.type === 'audio_b') {
+                        console.log('=== AUDIO_B RECEIVED ===');
+                        console.log('Audio B length:', data.content ? data.content.length : 0);
                         audioB = data.content;
-                        console.log('Received audio_b, has audioA:', !!audioA, 'has messageDiv:', !!messageDiv);
+                        console.log('Current state - audioA:', !!audioA, 'messageDiv:', !!messageDiv, 'modelA:', modelA, 'modelB:', modelB);
+                        
                         if (messageDiv && audioA) {
-                            console.log('Calling updateMessageWithAudio with both audios');
+                            console.log('Calling updateMessageWithAudio with BOTH audios');
                             updateMessageWithAudio(messageDiv, textContent, audioA, audioB, modelA, modelB);
+                        } else {
+                            console.log('NOT calling updateMessageWithAudio - missing audioA or messageDiv');
                         }
                     } else if (data.type === 'model_info') {
                         modelA = data.model_a;
