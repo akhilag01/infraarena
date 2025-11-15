@@ -9,6 +9,8 @@ let selectedModelA = null;
 let selectedModelB = null;
 let selectedModelSingle = null;
 let availableModels = [];
+let websocket = null;
+let audioPlayers = {}; // Store audio players for each audio_id
 
 const chatScreen = document.getElementById('chat-screen');
 const leaderboardScreen = document.getElementById('leaderboard-screen');
@@ -39,6 +41,128 @@ const emailSignupBtn = document.getElementById('email-signup-btn');
 const googleLoginBtn = document.getElementById('google-login-btn');
 const emailInput = document.getElementById('email-input');
 const passwordInput = document.getElementById('password-input');
+
+// MediaSource audio player for streaming MP3
+class StreamingAudioPlayer {
+    constructor() {
+        this.audioElement = new Audio();
+        this.mediaSource = new MediaSource();
+        this.sourceBuffer = null;
+        this.queue = [];
+        this.isAppending = false;
+        this.isEnded = false;
+        
+        this.audioElement.src = URL.createObjectURL(this.mediaSource);
+        
+        this.mediaSource.addEventListener('sourceopen', () => {
+            try {
+                this.sourceBuffer = this.mediaSource.addSourceBuffer('audio/mpeg');
+                this.sourceBuffer.mode = 'sequence';
+                
+                this.sourceBuffer.addEventListener('updateend', () => {
+                    this.isAppending = false;
+                    this.processQueue();
+                });
+                
+                this.sourceBuffer.addEventListener('error', (e) => {
+                    console.error('SourceBuffer error:', e);
+                });
+            } catch (e) {
+                console.error('Error creating SourceBuffer:', e);
+            }
+        });
+        
+        this.mediaSource.addEventListener('sourceended', () => {
+            console.log('MediaSource ended');
+        });
+        
+        this.audioElement.addEventListener('error', (e) => {
+            console.error('Audio element error:', e, this.audioElement.error);
+        });
+    }
+    
+    appendChunk(chunk) {
+        if (this.isEnded) {
+            console.warn('Attempted to append chunk after end');
+            return;
+        }
+        
+        this.queue.push(chunk);
+        this.processQueue();
+        
+        // Auto-play when we have enough buffered
+        if (this.audioElement.paused && this.audioElement.readyState >= 2) {
+            this.audioElement.play().catch(e => console.error('Play error:', e));
+        }
+    }
+    
+    processQueue() {
+        if (this.isAppending || this.queue.length === 0 || !this.sourceBuffer || this.sourceBuffer.updating) {
+            return;
+        }
+        
+        try {
+            this.isAppending = true;
+            const chunk = this.queue.shift();
+            this.sourceBuffer.appendBuffer(chunk);
+        } catch (e) {
+            console.error('Error appending buffer:', e);
+            this.isAppending = false;
+        }
+    }
+    
+    end() {
+        this.isEnded = true;
+        // Process remaining queue first
+        if (this.queue.length > 0) {
+            setTimeout(() => this.end(), 100);
+            return;
+        }
+        
+        if (this.mediaSource.readyState === 'open' && !this.sourceBuffer.updating) {
+            try {
+                this.mediaSource.endOfStream();
+            } catch (e) {
+                console.error('Error ending stream:', e);
+            }
+        }
+    }
+    
+    play() {
+        return this.audioElement.play();
+    }
+    
+    pause() {
+        this.audioElement.pause();
+    }
+    
+    getCurrentTime() {
+        return this.audioElement.currentTime;
+    }
+    
+    getDuration() {
+        return this.audioElement.duration;
+    }
+    
+    seek(time) {
+        this.audioElement.currentTime = time;
+    }
+    
+    addEventListener(event, handler) {
+        this.audioElement.addEventListener(event, handler);
+    }
+    
+    destroy() {
+        this.audioElement.pause();
+        this.audioElement.src = '';
+        if (this.mediaSource.readyState === 'open') {
+            try {
+                this.mediaSource.endOfStream();
+            } catch (e) {}
+        }
+        URL.revokeObjectURL(this.audioElement.src);
+    }
+}
 
 function showScreen(screen) {
     [chatScreen, leaderboardScreen].forEach(s => s.classList.remove('active'));
@@ -280,133 +404,134 @@ async function sendMessage(message) {
     const placeholder = addGeneratingPlaceholder();
     
     try {
-        const requestBody = { 
-            session_id: sessionId, 
-            message,
-            mode: currentMode
-        };
+        // Create WebSocket connection
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
         
-        if (currentMode === 'direct' && selectedModelSingle) {
-            requestBody.model_id = selectedModelSingle;
-        } else if (currentMode === 'side-by-side' && selectedModelA && selectedModelB) {
-            requestBody.model_a_id = selectedModelA;
-            requestBody.model_b_id = selectedModelB;
-        }
-        
-        const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
-        });
-        
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
+        console.log('Connecting to WebSocket:', wsUrl);
+        websocket = new WebSocket(wsUrl);
+        websocket.binaryType = 'arraybuffer';
         
         let textContent = '';
-        let audioA = null;
-        let audioB = null;
         let shouldVote = false;
         let messageDiv = null;
         let modelA = null;
         let modelB = null;
-        let buffer = ''; // Buffer for incomplete JSON
+        let currentAudioId = null;
         
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+        websocket.onopen = () => {
+            console.log('WebSocket connected');
             
-            const chunk = decoder.decode(value, { stream: true });
-            buffer += chunk;
+            const requestBody = { 
+                session_id: sessionId, 
+                message,
+                mode: currentMode
+            };
             
-            // Split by newline but keep incomplete lines in buffer
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || ''; // Keep the last incomplete line in buffer
+            if (currentMode === 'direct' && selectedModelSingle) {
+                requestBody.model_id = selectedModelSingle;
+            } else if (currentMode === 'side-by-side' && selectedModelA && selectedModelB) {
+                requestBody.model_a_id = selectedModelA;
+                requestBody.model_b_id = selectedModelB;
+            }
             
-            for (const line of lines) {
-                if (!line.trim()) continue;
+            websocket.send(JSON.stringify(requestBody));
+        };
+        
+        websocket.onmessage = async (event) => {
+            // Handle binary data (audio chunks)
+            if (event.data instanceof ArrayBuffer) {
+                console.log('Received audio chunk:', event.data.byteLength, 'bytes');
                 
-                try {
-                    const data = JSON.parse(line);
-                    
-                    if (data.type === 'text_delta') {
-                        textContent += data.content;
-                        if (!messageDiv) {
-                            placeholder.remove();
-                            messageDiv = addMessage(textContent, false);
-                        } else {
-                            const textDiv = messageDiv.querySelector('.message-text');
-                            if (textDiv) {
-                                textDiv.textContent = textContent;
-                            }
-                        }
-                        chatMessages.scrollTop = chatMessages.scrollHeight;
-                    } else if (data.type === 'text') {
-                        textContent = data.content;
-                        if (!messageDiv) {
-                            placeholder.remove();
-                            messageDiv = addMessage(textContent, false);
-                        }
-                        chatMessages.scrollTop = chatMessages.scrollHeight;
-                    } else if (data.type === 'audio_a') {
-                        console.log('=== AUDIO_A RECEIVED ===');
-                        console.log('Audio A length:', data.content ? data.content.length : 0);
-                        audioA = data.content;
-                        console.log('Current state - mode:', currentMode, 'audioB:', !!audioB, 'messageDiv:', !!messageDiv, 'modelA:', modelA, 'modelB:', modelB);
-                        
-                        if (currentMode === 'direct' && messageDiv) {
-                            console.log('Calling updateMessageWithAudio for DIRECT mode');
-                            updateMessageWithAudio(messageDiv, textContent, audioA, null, modelA, modelB);
-                        } else if (messageDiv && audioB) {
-                            console.log('Calling updateMessageWithAudio with BOTH audios');
-                            updateMessageWithAudio(messageDiv, textContent, audioA, audioB, modelA, modelB);
-                        } else {
-                            console.log('NOT calling updateMessageWithAudio yet - waiting for audioB');
-                        }
-                    } else if (data.type === 'audio_b') {
-                        console.log('=== AUDIO_B RECEIVED ===');
-                        console.log('Audio B length:', data.content ? data.content.length : 0);
-                        audioB = data.content;
-                        console.log('Current state - audioA:', !!audioA, 'messageDiv:', !!messageDiv, 'modelA:', modelA, 'modelB:', modelB);
-                        
-                        if (messageDiv && audioA) {
-                            console.log('Calling updateMessageWithAudio with BOTH audios');
-                            updateMessageWithAudio(messageDiv, textContent, audioA, audioB, modelA, modelB);
-                        } else {
-                            console.log('NOT calling updateMessageWithAudio - missing audioA or messageDiv');
-                        }
-                    } else if (data.type === 'model_info') {
-                        modelA = data.model_a;
-                        modelB = data.model_b;
-                        console.log('Received model_info:', modelA, modelB);
-                    } else if (data.type === 'metadata') {
-                        shouldVote = data.should_vote;
-                    }
-                } catch (e) {
-                    console.error('Error parsing stream chunk:', e);
+                if (currentAudioId && audioPlayers[currentAudioId]) {
+                    const chunk = new Uint8Array(event.data);
+                    audioPlayers[currentAudioId].appendChunk(chunk);
                 }
+                return;
             }
-        }
-        
-        // Process any remaining buffer
-        if (buffer.trim()) {
+            
+            // Handle JSON messages
             try {
-                const data = JSON.parse(buffer);
-                // Handle final chunk (same logic as above)
-                if (data.type === 'metadata') {
+                const data = JSON.parse(event.data);
+                console.log('WebSocket message:', data.type);
+                
+                if (data.type === 'text_delta') {
+                    textContent += data.content;
+                    if (!messageDiv) {
+                        placeholder.remove();
+                        messageDiv = addMessage(textContent, false);
+                    } else {
+                        const textDiv = messageDiv.querySelector('.message-text');
+                        if (textDiv) {
+                            textDiv.textContent = textContent;
+                        }
+                    }
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                    
+                } else if (data.type === 'text') {
+                    textContent = data.content;
+                    if (!messageDiv) {
+                        placeholder.remove();
+                        messageDiv = addMessage(textContent, false);
+                    }
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                    
+                } else if (data.type === 'model_info') {
+                    modelA = data.model_a;
+                    modelB = data.model_b;
+                    console.log('Received model_info:', modelA, modelB);
+                    
+                } else if (data.type === 'audio_start') {
+                    console.log('Audio stream starting:', data.audio_id, data.model);
+                    currentAudioId = data.audio_id;
+                    audioPlayers[data.audio_id] = new StreamingAudioPlayer();
+                    
+                    // Create voice card immediately with streaming player
+                    if (!messageDiv) {
+                        placeholder.remove();
+                        messageDiv = addMessage(textContent, false);
+                    }
+                    
+                } else if (data.type === 'audio_end') {
+                    console.log('Audio stream ended:', data.audio_id);
+                    if (audioPlayers[data.audio_id]) {
+                        audioPlayers[data.audio_id].end();
+                    }
+                    currentAudioId = null;
+                    
+                } else if (data.type === 'metadata') {
                     shouldVote = data.should_vote;
+                    
+                } else if (data.type === 'error') {
+                    console.error('Server error:', data.message);
+                    placeholder.remove();
+                    addMessage(`Error: ${data.message}`, false);
                 }
+                
             } catch (e) {
-                console.error('Error parsing final buffer:', e, 'Buffer:', buffer.substring(0, 100));
+                console.error('Error parsing WebSocket message:', e);
             }
-        }
+        };
         
-        if (shouldVote) {
-            showVotePrompt();
-        }
+        websocket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            placeholder.remove();
+            addMessage('Connection error. Please try again.', false);
+        };
         
-        if (authToken) {
-            loadChatHistory();
-        }
+        websocket.onclose = () => {
+            console.log('WebSocket closed');
+            
+            if (shouldVote) {
+                showVotePrompt();
+            }
+            
+            if (authToken) {
+                loadChatHistory();
+            }
+            
+            websocket = null;
+        };
     } catch (error) {
         console.error('Error sending message:', error);
         placeholder.remove();

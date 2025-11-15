@@ -6,7 +6,7 @@ import httpx
 import asyncio
 import json
 from typing import Optional
-from fastapi import FastAPI, HTTPException, UploadFile, File, Header
+from fastapi import FastAPI, HTTPException, UploadFile, File, Header, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -514,6 +514,170 @@ async def transcribe_audio(file: UploadFile = File(...)):
         return {"text": transcript.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.websocket("/ws/chat")
+async def websocket_chat(websocket: WebSocket):
+    await websocket.accept()
+    
+    try:
+        # Receive initial message with session_id, message, mode, etc.
+        data = await websocket.receive_json()
+        
+        session_id = data.get('session_id')
+        message = data.get('message')
+        mode = data.get('mode', 'battle')
+        model_id = data.get('model_id')
+        model_a_id = data.get('model_a_id')
+        model_b_id = data.get('model_b_id')
+        
+        supabase = get_supabase()
+        
+        # Get session from Supabase
+        session_data = supabase.table('sessions').select('*').eq('session_id', session_id).single().execute()
+        if not session_data.data:
+            await websocket.send_json({"type": "error", "message": "Session not found"})
+            await websocket.close()
+            return
+        
+        session = session_data.data
+        models = get_models()
+        
+        # Select models based on mode
+        if mode == 'direct':
+            if not model_id:
+                await websocket.send_json({"type": "error", "message": "model_id required for direct mode"})
+                await websocket.close()
+                return
+            selected_models = [m for m in models if m['id'] == model_id]
+            if not selected_models:
+                await websocket.send_json({"type": "error", "message": "Model not found"})
+                await websocket.close()
+                return
+        elif mode == 'side-by-side':
+            if model_a_id and model_b_id:
+                model_a = next((m for m in models if m['id'] == model_a_id), None)
+                model_b = next((m for m in models if m['id'] == model_b_id), None)
+                if not model_a or not model_b:
+                    await websocket.send_json({"type": "error", "message": "One or both models not found"})
+                    await websocket.close()
+                    return
+                selected_models = [model_a, model_b]
+            else:
+                selected_models = random.sample(models, 2)
+        else:  # battle mode
+            selected_models = random.sample(models, 2)
+        
+        # Get messages
+        messages = session.get('messages', [])
+        messages.append({"role": "user", "content": message})
+        
+        # Generate AI response with streaming
+        openai_client = get_openai_client()
+        assistant_message = ""
+        
+        stream = openai_client.chat.completions.create(
+            model="gpt-4",
+            messages=messages,
+            stream=True
+        )
+        
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                content = chunk.choices[0].delta.content
+                assistant_message += content
+                await websocket.send_json({"type": "text_delta", "content": content})
+        
+        # Send complete text
+        await websocket.send_json({"type": "text", "content": assistant_message})
+        messages.append({"role": "assistant", "content": assistant_message})
+        
+        # Send model info
+        if mode == 'direct':
+            await websocket.send_json({
+                "type": "model_info",
+                "model_a": selected_models[0].get('display_name') or selected_models[0]['name']
+            })
+        else:
+            await websocket.send_json({
+                "type": "model_info",
+                "model_a": selected_models[0].get('display_name') or selected_models[0]['name'],
+                "model_b": selected_models[1].get('display_name') or selected_models[1]['name']
+            })
+        
+        # Stream TTS audio
+        tts_service = get_tts_service()
+        
+        if mode == 'direct':
+            # Stream audio for single model
+            await websocket.send_json({"type": "audio_start", "audio_id": "a", "model": selected_models[0]['name']})
+            
+            response = openai_client.audio.speech.create(
+                model="tts-1",
+                voice="alloy",
+                input=assistant_message,
+                response_format="mp3"
+            )
+            
+            # Stream MP3 chunks
+            for chunk in response.iter_bytes(chunk_size=4096):
+                await websocket.send_bytes(chunk)
+            
+            await websocket.send_json({"type": "audio_end", "audio_id": "a"})
+        else:
+            # Stream audio for both models in parallel
+            async def stream_audio(model, audio_id):
+                await websocket.send_json({"type": "audio_start", "audio_id": audio_id, "model": model['name']})
+                
+                audio = await tts_service.generate_speech(assistant_message, model['name'])
+                
+                # Send audio in chunks
+                chunk_size = 4096
+                for i in range(0, len(audio), chunk_size):
+                    await websocket.send_bytes(audio[i:i+chunk_size])
+                
+                await websocket.send_json({"type": "audio_end", "audio_id": audio_id})
+            
+            # Stream both audios in parallel
+            await asyncio.gather(
+                stream_audio(selected_models[0], "a"),
+                stream_audio(selected_models[1], "b")
+            )
+        
+        # Update session in Supabase
+        new_prompt_count = session.get('prompt_count', 0) + 1
+        update_data = {
+            'messages': messages,
+            'prompt_count': new_prompt_count,
+            'model_a_id': selected_models[0]['id'],
+            'model_b_id': selected_models[1]['id'] if len(selected_models) > 1 else None
+        }
+        
+        if new_prompt_count == 1:
+            title = message[:50] + ('...' if len(message) > 50 else '')
+            update_data['title'] = title
+        
+        supabase.table('sessions').update(update_data).eq('session_id', session_id).execute()
+        
+        # Send metadata
+        await websocket.send_json({
+            "type": "metadata",
+            "prompt_count": new_prompt_count,
+            "should_vote": mode in ['battle', 'side-by-side']
+        })
+        
+    except WebSocketDisconnect:
+        print("WebSocket disconnected")
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+        except:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except:
+            pass
 
 @app.post("/api/auth/signup")
 async def signup(auth_request: AuthRequest):
