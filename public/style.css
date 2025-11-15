@@ -348,9 +348,16 @@ header {
 
 .header-content {
     display: flex;
-    justify-content: center;
-    align-items: flex-start;
+    justify-content: space-between;
+    align-items: center;
     position: relative;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex: 1;
 }
 
 .header-title {
@@ -358,20 +365,66 @@ header {
 }
 
 header h1 {
-    font-size: 2.25rem;
+    font-size: 1.5rem;
     font-weight: 700;
-    margin-bottom: 8px;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.02em;
     background: linear-gradient(135deg, var(--text) 0%, var(--text-secondary) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    white-space: nowrap;
 }
 
 .subtitle {
     color: var(--text-tertiary);
     font-size: 0.9375rem;
     font-weight: 500;
+}
+
+.header-model-selectors {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.header-model-selectors.hidden,
+.header-single-model-selector.hidden {
+    display: none;
+}
+
+.header-model-select-wrapper {
+    position: relative;
+}
+
+.header-model-select {
+    padding: 8px 32px 8px 12px;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+    appearance: none;
+    min-width: 180px;
+}
+
+.header-model-select:hover {
+    border-color: var(--border-light);
+    background: var(--surface-hover);
+}
+
+.header-model-select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.header-model-select option {
+    background: var(--surface);
+    color: var(--text);
+    padding: 8px 12px;
 }
 
 .header-login-btn {

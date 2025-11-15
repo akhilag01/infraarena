@@ -181,6 +181,8 @@ class ChatRequest(BaseModel):
     message: str
     mode: Optional[str] = 'battle'
     model_id: Optional[str] = None
+    model_a_id: Optional[str] = None
+    model_b_id: Optional[str] = None
 
 class VoteRequest(BaseModel):
     session_id: str
@@ -305,9 +307,16 @@ async def chat(request: ChatRequest):
             raise HTTPException(status_code=404, detail="Model not found")
         selected_models = [selected_models[0]]
     elif mode == 'side-by-side':
-        if len(models) < 2:
-            raise HTTPException(status_code=500, detail="Not enough TTS models available")
-        selected_models = random.sample(models, 2)
+        if request.model_a_id and request.model_b_id:
+            model_a = next((m for m in models if m['id'] == request.model_a_id), None)
+            model_b = next((m for m in models if m['id'] == request.model_b_id), None)
+            if not model_a or not model_b:
+                raise HTTPException(status_code=404, detail="One or both models not found")
+            selected_models = [model_a, model_b]
+        else:
+            if len(models) < 2:
+                raise HTTPException(status_code=500, detail="Not enough TTS models available")
+            selected_models = random.sample(models, 2)
     else:
         if len(models) < 2:
             raise HTTPException(status_code=500, detail="Not enough TTS models available")

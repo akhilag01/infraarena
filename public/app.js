@@ -5,7 +5,9 @@ let isRecording = false;
 let currentUser = null;
 let authToken = null;
 let currentMode = 'battle';
-let selectedModel = null;
+let selectedModelA = null;
+let selectedModelB = null;
+let selectedModelSingle = null;
 let availableModels = [];
 
 const chatScreen = document.getElementById('chat-screen');
@@ -16,8 +18,12 @@ const sendBtn = document.getElementById('send-btn');
 const voiceBtn = document.getElementById('voice-btn');
 const chatMessages = document.getElementById('chat-messages');
 const votePrompt = document.getElementById('vote-prompt');
-const modelSelector = document.getElementById('model-selector');
-const modelSelect = document.getElementById('model-select');
+
+const headerModelSelectors = document.getElementById('header-model-selectors');
+const headerModelSelectA = document.getElementById('header-model-select-a');
+const headerModelSelectB = document.getElementById('header-model-select-b');
+const headerSingleModelSelector = document.getElementById('header-single-model-selector');
+const headerModelSelectSingle = document.getElementById('header-model-select-single');
 
 const loginBtn = document.getElementById('login-btn');
 const headerLoginBtn = document.getElementById('header-login-btn');
@@ -272,8 +278,11 @@ async function sendMessage(message) {
             mode: currentMode
         };
         
-        if (currentMode === 'direct' && selectedModel) {
-            requestBody.model_id = selectedModel;
+        if (currentMode === 'direct' && selectedModelSingle) {
+            requestBody.model_id = selectedModelSingle;
+        } else if (currentMode === 'side-by-side' && selectedModelA && selectedModelB) {
+            requestBody.model_a_id = selectedModelA;
+            requestBody.model_b_id = selectedModelB;
         }
         
         const response = await fetch('/api/chat', {
@@ -1084,11 +1093,15 @@ function switchMode(mode) {
     
     chatScreen.className = 'screen active mode-' + mode;
     
-    if (mode === 'direct') {
-        modelSelector.classList.remove('hidden');
+    headerModelSelectors.classList.add('hidden');
+    headerSingleModelSelector.classList.add('hidden');
+    
+    if (mode === 'side-by-side') {
+        headerModelSelectors.classList.remove('hidden');
         loadModels();
-    } else {
-        modelSelector.classList.add('hidden');
+    } else if (mode === 'direct') {
+        headerSingleModelSelector.classList.remove('hidden');
+        loadModels();
     }
     
     startSession();
@@ -1100,20 +1113,56 @@ async function loadModels() {
         const data = await response.json();
         availableModels = data.models;
         
-        modelSelect.innerHTML = availableModels.map(model => 
-            `<option value="${model.id}">${model.display_name}</option>`
-        ).join('');
+        const createOption = (model) => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = model.display_name;
+            option.dataset.provider = model.provider;
+            option.dataset.logo = model.logo_url;
+            return option;
+        };
         
-        if (availableModels.length > 0) {
-            selectedModel = availableModels[0].id;
+        if (currentMode === 'side-by-side') {
+            headerModelSelectA.innerHTML = '';
+            headerModelSelectB.innerHTML = '';
+            availableModels.forEach(model => {
+                headerModelSelectA.appendChild(createOption(model));
+                headerModelSelectB.appendChild(createOption(model).cloneNode(true));
+            });
+            
+            if (availableModels.length >= 2) {
+                selectedModelA = availableModels[0].id;
+                selectedModelB = availableModels[1].id;
+                headerModelSelectB.selectedIndex = 1;
+            }
+        } else if (currentMode === 'direct') {
+            headerModelSelectSingle.innerHTML = '';
+            availableModels.forEach(model => {
+                headerModelSelectSingle.appendChild(createOption(model));
+            });
+            
+            if (availableModels.length > 0) {
+                selectedModelSingle = availableModels[0].id;
+            }
         }
     } catch (error) {
         console.error('Error loading models:', error);
     }
 }
 
-modelSelect.addEventListener('change', (e) => {
-    selectedModel = e.target.value;
+headerModelSelectA.addEventListener('change', (e) => {
+    selectedModelA = e.target.value;
+    startSession();
+});
+
+headerModelSelectB.addEventListener('change', (e) => {
+    selectedModelB = e.target.value;
+    startSession();
+});
+
+headerModelSelectSingle.addEventListener('change', (e) => {
+    selectedModelSingle = e.target.value;
+    startSession();
 });
 
 startSession();
