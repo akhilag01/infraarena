@@ -1,44 +1,175 @@
 # Voice Arena
 
-A minimalist voice TTS comparison platform where users chat with two alternating TTS models and vote on their preferences. Features an ELO ranking system to track model performance.
+A real-time TTS comparison platform where users compare voice models side-by-side with progressive audio streaming. Features an ELO ranking system and sentence-level streaming for instant audio playback.
 
 ## Features
 
-- **Dual TTS Comparison**: Two TTS models alternate responses in a single conversation
+- **Real-time Audio Streaming**: Progressive audio loading with sentence-level TTS generation
+- **Side-by-Side Comparison**: Compare two TTS models simultaneously with visual progress indicators
 - **Multiple Providers**: ElevenLabs, OpenAI, Deepgram, Cartesia
 - **ELO Ranking System**: Track model performance based on user votes
-- **Minimalist UI**: Clean, modern interface inspired by Sesame
-- **Real-time Voting**: Vote every 3 prompts on preferred voice
+- **Progressive Loading**: YouTube-style buffering with dual progress bars (buffered vs played)
+- **Three Modes**: 
+  - Battle Mode: Blind comparison with hidden model names
+  - Side-by-Side: Compare specific models with visible names
+  - Direct Chat: Single model conversation
 - **Leaderboard**: View rankings and statistics for all models
+- **Authentication**: Optional user accounts with Google OAuth and email/password
 
-## Setup
+## Architecture
 
-1. Install dependencies:
+- **Backend**: FastAPI with real-time streaming endpoints
+- **Frontend**: Vanilla JavaScript with MediaSource Extensions API
+- **TTS Providers**: Multi-provider support with concurrent generation
+- **Database**: Supabase (PostgreSQL) for user data and voting history
+- **Streaming**: Sentence-buffered LLM→TTS pipeline with HTTP streaming
+- **Deployment**: Vercel serverless functions
+
+## Local Development
+
+### Prerequisites
+
+- Python 3.8+
+- Node.js (for Vercel CLI, optional)
+- API keys for TTS providers
+- Supabase account (for database and auth)
+
+### Setup
+
+1. **Install dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Create `.env` file from `.env.example`:
+2. **Create `.env` file:**
 ```bash
 cp .env.example .env
 ```
 
-3. Add your API keys to `.env`:
-```
-OPENAI_API_KEY=your_openai_key
-ELEVENLABS_API_KEY=your_elevenlabs_key
-DEEPGRAM_API_KEY=your_deepgram_key
-CARTESIA_API_KEY=your_cartesia_key
+3. **Add your API keys to `.env`:**
+```env
+# TTS Provider Keys
+OPENAI_API_KEY=sk-...
+ELEVENLABS_API_KEY=...
+DEEPGRAM_API_KEY=...
+CARTESIA_API_KEY=...
+
+# Supabase (Database & Auth)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-anon-key
+
+# Google OAuth (optional, for auth)
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
 ```
 
 **Note for Team**: Contact the team lead for the shared development API keys via Slack/Discord. Keys are not stored in the repository for security.
 
-4. Run the application:
+4. **Run locally:**
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# Option A: Python directly
+cd api
+python3 -m uvicorn index:app --reload --port 8000
+
+# Option B: Vercel CLI (recommended)
+vercel dev
 ```
 
-5. Open http://localhost:8000 in your browser
+5. **Open http://localhost:3000** (Vercel) or **http://localhost:8000** (Python)
+
+## Deploying to Vercel
+
+### Quick Deploy
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/voice-arena)
+
+### Manual Deploy
+
+1. **Install Vercel CLI:**
+```bash
+npm i -g vercel
+```
+
+2. **Login to Vercel:**
+```bash
+vercel login
+```
+
+3. **Deploy:**
+```bash
+vercel
+```
+
+4. **Add environment variables in Vercel Dashboard:**
+   - Go to your project → Settings → Environment Variables
+   - Add all keys from `.env`:
+     - `OPENAI_API_KEY`
+     - `ELEVENLABS_API_KEY`
+     - `DEEPGRAM_API_KEY`
+     - `CARTESIA_API_KEY`
+     - `SUPABASE_URL`
+     - `SUPABASE_KEY`
+     - `GOOGLE_CLIENT_ID` (optional)
+     - `GOOGLE_CLIENT_SECRET` (optional)
+
+5. **Redeploy after adding environment variables:**
+```bash
+vercel --prod
+```
+
+### Vercel Configuration
+
+The project includes `vercel.json` with the following configuration:
+
+```json
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+```
+
+- **Backend**: Python FastAPI serverless function at `/api/index.py`
+- **Frontend**: Static files served from `/public/`
+- **Routing**: All `/api/*` routes handled by Python, everything else serves static HTML
+
+### Requirements
+
+The `requirements.txt` must include all Python dependencies:
+```
+fastapi
+python-dotenv
+openai
+elevenlabs
+deepgram-sdk
+cartesia
+pydantic
+httpx
+python-multipart
+supabase
+gotrue
+```
+
+### Vercel Limitations
+
+- **No WebSockets**: Uses HTTP streaming with `StreamingResponse` instead
+- **10s timeout**: Default serverless function timeout (can be increased with Pro plan)
+- **50MB limit**: Response size limit for serverless functions
+- **Cold starts**: First request may be slower (~1-3s)
+
+### Custom Domain
+
+1. Go to project Settings → Domains
+2. Add your custom domain
+3. Update DNS records as instructed
+4. SSL certificate auto-provisioned by Vercel
 
 ## Architecture
 
