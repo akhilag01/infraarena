@@ -524,13 +524,13 @@ async function sendMessage(message) {
         const decoder = new TextDecoder();
         
         let textContent = '';
+        let audioA = null;
+        let audioB = null;
         let shouldVote = false;
         let messageDiv = null;
         let modelA = null;
         let modelB = null;
         let buffer = '';
-        let currentAudioId = null;
-        let audioBuffers = { a: [], b: [] };
         
         while (true) {
             const { done, value } = await reader.read();
@@ -574,53 +574,20 @@ async function sendMessage(message) {
                         modelB = data.model_b;
                         console.log('Received model_info:', modelA, modelB);
                         
-                    } else if (data.type === 'audio_chunk') {
-                        // Receive base64-encoded audio chunks
-                        const audioId = data.audio_id;
-                        const chunkData = data.chunk;
-                        
-                        if (!audioPlayers[audioId]) {
-                            console.log('Creating new audio player for:', audioId);
-                            audioPlayers[audioId] = new StreamingAudioPlayer();
+                    } else if (data.type === 'audio_a') {
+                        audioA = data.content;
+                        console.log('=== AUDIO_A RECEIVED ===');
+                        if (currentMode === 'direct' && messageDiv) {
+                            updateMessageWithAudio(messageDiv, textContent, audioA, null, modelA, modelB);
+                        } else if (messageDiv && audioB) {
+                            updateMessageWithAudio(messageDiv, textContent, audioA, audioB, modelA, modelB);
                         }
                         
-                        // Create/update voice cards
-                        if (messageDiv) {
-                            let voicesContainer = messageDiv.querySelector('.voices-container');
-                            
-                            if (!voicesContainer) {
-                                voicesContainer = document.createElement('div');
-                                voicesContainer.className = 'voices-container';
-                                messageDiv.appendChild(voicesContainer);
-                            }
-                            
-                            // Check if voice card for this audio ID already exists
-                            const existingCard = voicesContainer.querySelector(`[data-audio-id="${audioId}"]`);
-                            
-                            if (!existingCard) {
-                                const label = audioId === 'a' ? 'A' : 'B';
-                                const model = audioId === 'a' ? modelA : modelB;
-                                const voiceCard = createStreamingVoiceCard(label, audioPlayers[audioId], model);
-                                voiceCard.dataset.audioId = audioId;
-                                voicesContainer.appendChild(voiceCard);
-                                console.log(`Voice card created for ${audioId}`);
-                            }
-                        }
-                        
-                        // Decode base64 to binary
-                        const binaryString = atob(chunkData);
-                        const bytes = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {
-                            bytes[i] = binaryString.charCodeAt(i);
-                        }
-                        
-                        audioPlayers[audioId].appendChunk(bytes);
-                        console.log(`Audio chunk for ${audioId}:`, bytes.length, 'bytes');
-                        
-                    } else if (data.type === 'audio_end') {
-                        console.log('Audio stream ended:', data.audio_id);
-                        if (audioPlayers[data.audio_id]) {
-                            audioPlayers[data.audio_id].end();
+                    } else if (data.type === 'audio_b') {
+                        audioB = data.content;
+                        console.log('=== AUDIO_B RECEIVED ===');
+                        if (messageDiv && audioA) {
+                            updateMessageWithAudio(messageDiv, textContent, audioA, audioB, modelA, modelB);
                         }
                         
                     } else if (data.type === 'metadata') {

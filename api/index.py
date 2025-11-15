@@ -604,45 +604,28 @@ async def websocket_chat(websocket: WebSocket):
                 "model_b": selected_models[1].get('display_name') or selected_models[1]['name']
             })
         
-        # Stream TTS audio as base64-encoded chunks in JSON
+        # Generate TTS audio (revert to working approach - full audio at once)
         tts_service = get_tts_service()
         
         if mode == 'direct':
-            # Use OpenAI TTS-1 for direct mode with streaming
-            response = openai_client.audio.speech.create(
-                model="tts-1",
-                voice="alloy",
-                input=assistant_message,
-                response_format="mp3"
-            )
-            
-            # Stream MP3 chunks as base64 JSON
-            import base64
-            for chunk in response.iter_bytes(chunk_size=4096):
-                encoded_chunk = base64.b64encode(chunk).decode('utf-8')
-                yield json.dumps({"type": "audio_chunk", "audio_id": "a", "chunk": encoded_chunk}) + "\n"
-            
-            yield json.dumps({"type": "audio_end", "audio_id": "a"}) + "\n"
+            audio = await tts_service.generate_speech(assistant_message, selected_models[0]['name'])
+            yield json.dumps({"type": "audio_a", "content": audio.hex()}) + "\n"
         else:
-            # Stream audio for both models sequentially (parallel would require different approach)
-            import base64
+            # Generate both audios in parallel
+            tasks = {
+                'audio_a': asyncio.create_task(tts_service.generate_speech(assistant_message, selected_models[0]['name'])),
+                'audio_b': asyncio.create_task(tts_service.generate_speech(assistant_message, selected_models[1]['name']))
+            }
             
-            # Generate and stream audio A
-            audio_a = await tts_service.generate_speech(assistant_message, selected_models[0]['name'])
-            chunk_size = 4096
-            for i in range(0, len(audio_a), chunk_size):
-                chunk = audio_a[i:i+chunk_size]
-                encoded_chunk = base64.b64encode(chunk).decode('utf-8')
-                yield json.dumps({"type": "audio_chunk", "audio_id": "a", "chunk": encoded_chunk}) + "\n"
-            yield json.dumps({"type": "audio_end", "audio_id": "a"}) + "\n"
+            pending = set(tasks.values())
+            task_names = {v: k for k, v in tasks.items()}
             
-            # Generate and stream audio B
-            audio_b = await tts_service.generate_speech(assistant_message, selected_models[1]['name'])
-            for i in range(0, len(audio_b), chunk_size):
-                chunk = audio_b[i:i+chunk_size]
-                encoded_chunk = base64.b64encode(chunk).decode('utf-8')
-                yield json.dumps({"type": "audio_chunk", "audio_id": "b", "chunk": encoded_chunk}) + "\n"
-            yield json.dumps({"type": "audio_end", "audio_id": "b"}) + "\n"
+            while pending:
+                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    audio_data = await task
+                    audio_key = task_names[task]
+                    yield json.dumps({"type": audio_key, "content": audio_data.hex()}) + "\n"
         
         # Update session in Supabase
         new_prompt_count = session.get('prompt_count', 0) + 1
