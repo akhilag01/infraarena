@@ -803,9 +803,6 @@ newChatBtn.addEventListener('click', () => {
 });
 
 navChat.addEventListener('click', () => {
-    if (chatScreen.classList.contains('active')) {
-        return;
-    }
     showScreen(chatScreen);
     updateActiveNav(navChat);
 });
