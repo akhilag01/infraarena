@@ -4,7 +4,7 @@ import uuid
 import io
 import httpx
 from typing import Optional
-from fastapi import FastAPI, HTTPException, UploadFile, File, Header, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
@@ -462,16 +462,14 @@ async def login(auth_request: AuthRequest):
         raise HTTPException(status_code=401, detail=str(e))
 
 @app.post("/api/auth/google")
-async def google_auth(request: Request):
+async def google_auth():
     supabase = get_supabase()
     try:
-        # Get the origin from the request headers to support both domains
-        origin = request.headers.get("origin", "https://infrafield.app")
-        
+        # Use infrafield.app as the primary domain
         response = supabase.auth.sign_in_with_oauth({
             "provider": "google",
             "options": {
-                "redirect_to": origin
+                "redirect_to": "https://infrafield.app"
             }
         })
         return response
