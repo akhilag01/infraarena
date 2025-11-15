@@ -631,11 +631,13 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
             if request.mode == 'direct':
                 sentence_queues['a'] = asyncio.Queue()
                 tts_tasks.append(asyncio.create_task(tts_worker(selected_models[0]['name'], 'a', sentence_queues['a'])))
+                print(f"[Main] Started 1 worker for direct mode")
             else:
                 sentence_queues['a'] = asyncio.Queue()
                 sentence_queues['b'] = asyncio.Queue()
                 tts_tasks.append(asyncio.create_task(tts_worker(selected_models[0]['name'], 'a', sentence_queues['a'])))
                 tts_tasks.append(asyncio.create_task(tts_worker(selected_models[1]['name'], 'b', sentence_queues['b'])))
+                print(f"[Main] Started 2 workers: a={selected_models[0]['name']}, b={selected_models[1]['name']}")
             
             # Stream LLM tokens and extract sentences
             stream = openai_client.chat.completions.create(
@@ -709,13 +711,20 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                 }) + "\n"
             
             # Wait for all TTS workers to complete
+            print(f"[Main] Waiting for {len(tts_tasks)} workers to complete...")
             await asyncio.gather(*tts_tasks)
+            print(f"[Main] All workers completed. Output queue size: {output_queue.qsize()}")
             
             # Stream remaining audio chunks
+            chunk_count = 0
             while not output_queue.empty():
                 audio_chunk = await output_queue.get()
+                print(f"[Main] Yielding final audio chunk: label={audio_chunk['label']}, chunk_id={audio_chunk['chunk_id']}")
                 yield json.dumps(audio_chunk) + "\n"
                 output_queue.task_done()
+                chunk_count += 1
+            
+            print(f"[Main] Streamed {chunk_count} final audio chunks")
             
             # Update session
             new_prompt_count = session.get('prompt_count', 0) + 1
