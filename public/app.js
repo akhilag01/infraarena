@@ -320,19 +320,24 @@ async function sendMessage(message) {
                         chatMessages.scrollTop = chatMessages.scrollHeight;
                     } else if (data.type === 'audio_a') {
                         audioA = data.content;
+                        console.log('Received audio_a, mode:', currentMode, 'has audioB:', !!audioB, 'has messageDiv:', !!messageDiv);
                         if (currentMode === 'direct' && messageDiv) {
                             updateMessageWithAudio(messageDiv, textContent, audioA, null, modelA, modelB);
-                        } else if (messageDiv && audioA && audioB) {
+                        } else if (messageDiv && audioB) {
+                            console.log('Calling updateMessageWithAudio with both audios');
                             updateMessageWithAudio(messageDiv, textContent, audioA, audioB, modelA, modelB);
                         }
                     } else if (data.type === 'audio_b') {
                         audioB = data.content;
-                        if (messageDiv && audioA && audioB) {
+                        console.log('Received audio_b, has audioA:', !!audioA, 'has messageDiv:', !!messageDiv);
+                        if (messageDiv && audioA) {
+                            console.log('Calling updateMessageWithAudio with both audios');
                             updateMessageWithAudio(messageDiv, textContent, audioA, audioB, modelA, modelB);
                         }
                     } else if (data.type === 'model_info') {
                         modelA = data.model_a;
                         modelB = data.model_b;
+                        console.log('Received model_info:', modelA, modelB);
                     } else if (data.type === 'metadata') {
                         shouldVote = data.should_vote;
                     }
@@ -1107,15 +1112,26 @@ function switchMode(mode) {
 async function loadModels() {
     try {
         const response = await fetch('/api/models');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
-        availableModels = data.models;
+        console.log('Loaded models:', data);
+        availableModels = data.models || [];
+        
+        if (!availableModels || availableModels.length === 0) {
+            console.error('No models available');
+            return;
+        }
         
         const createOption = (model) => {
+            console.log('Creating option for model:', model);
             const option = document.createElement('option');
             option.value = model.id;
-            option.textContent = model.display_name;
-            option.dataset.provider = model.provider;
-            option.dataset.logo = model.logo_url;
+            const displayName = model.display_name || model.name || `Model ${model.id}`;
+            option.textContent = displayName;
+            option.dataset.provider = model.provider || '';
+            option.dataset.logo = model.logo_url || '';
             return option;
         };
         
@@ -1124,7 +1140,12 @@ async function loadModels() {
             headerModelSelectB.innerHTML = '';
             availableModels.forEach(model => {
                 headerModelSelectA.appendChild(createOption(model));
-                headerModelSelectB.appendChild(createOption(model).cloneNode(true));
+                const optionB = document.createElement('option');
+                optionB.value = model.id;
+                optionB.textContent = model.display_name || model.name;
+                optionB.dataset.provider = model.provider || '';
+                optionB.dataset.logo = model.logo_url || '';
+                headerModelSelectB.appendChild(optionB);
             });
             
             if (availableModels.length >= 2) {

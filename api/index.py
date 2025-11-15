@@ -348,7 +348,7 @@ async def chat(request: ChatRequest):
             yield json.dumps({"type": "audio_a", "content": audio.hex()}) + "\n"
             yield json.dumps({
                 "type": "model_info",
-                "model_a": selected_models[0]['display_name']
+                "model_a": selected_models[0].get('display_name') or selected_models[0]['name']
             }) + "\n"
         else:
             tasks = {
@@ -366,12 +366,12 @@ async def chat(request: ChatRequest):
                     audio_key = task_names[task]
                     yield json.dumps({"type": audio_key, "content": audio_data.hex()}) + "\n"
             
-            if mode == 'side-by-side':
-                yield json.dumps({
-                    "type": "model_info",
-                    "model_a": selected_models[0]['display_name'],
-                    "model_b": selected_models[1]['display_name']
-                }) + "\n"
+            # Send model info for both battle and side-by-side modes
+            yield json.dumps({
+                "type": "model_info",
+                "model_a": selected_models[0].get('display_name') or selected_models[0]['name'],
+                "model_b": selected_models[1].get('display_name') or selected_models[1]['name']
+            }) + "\n"
         
         # Update session in Supabase
         new_prompt_count = session.get('prompt_count', 0) + 1
