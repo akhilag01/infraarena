@@ -802,6 +802,37 @@ async function sendMessageRealtime(message) {
                         if (!realtimePlayers[label]) {
                             realtimePlayers[label] = new RealtimeAudioPlayer(label);
                             console.log(`Created realtime player for ${label}`);
+                            
+                            // Create voice card in UI for this player
+                            if (messageDiv) {
+                                let voicesContainer = messageDiv.querySelector('.voices-container');
+                                if (!voicesContainer) {
+                                    voicesContainer = document.createElement('div');
+                                    voicesContainer.className = 'voices-container';
+                                    messageDiv.appendChild(voicesContainer);
+                                }
+                                
+                                // Create voice card
+                                const voiceCard = document.createElement('div');
+                                voiceCard.className = 'voice-card streaming';
+                                voiceCard.dataset.label = label;
+                                
+                                const header = document.createElement('div');
+                                header.className = 'voice-card-header';
+                                const labelText = label === 'a' ? (modelA || 'Voice A') : (modelB || 'Voice B');
+                                header.innerHTML = `<span class="voice-label">${labelText}</span>`;
+                                
+                                const statusDiv = document.createElement('div');
+                                statusDiv.className = 'streaming-status';
+                                statusDiv.textContent = '🎵 Streaming...';
+                                statusDiv.style.cssText = 'font-size: 12px; color: #666; margin-top: 8px;';
+                                
+                                voiceCard.appendChild(header);
+                                voiceCard.appendChild(statusDiv);
+                                voicesContainer.appendChild(voiceCard);
+                                
+                                console.log(`Voice card created for ${label}`);
+                            }
                         }
                         
                         // Add chunk to player (will start playing when buffer full)
