@@ -604,13 +604,11 @@ async def websocket_chat(websocket: WebSocket):
                 "model_b": selected_models[1].get('display_name') or selected_models[1]['name']
             })
         
-        # Stream TTS audio
+        # Stream TTS audio as base64-encoded chunks in JSON
         tts_service = get_tts_service()
         
         if mode == 'direct':
-            # Stream audio for single model
-            await websocket.send_json({"type": "audio_start", "audio_id": "a", "model": selected_models[0]['name']})
-            
+            # Use OpenAI TTS-1 for direct mode with streaming
             response = openai_client.audio.speech.create(
                 model="tts-1",
                 voice="alloy",
@@ -618,30 +616,33 @@ async def websocket_chat(websocket: WebSocket):
                 response_format="mp3"
             )
             
-            # Stream MP3 chunks
+            # Stream MP3 chunks as base64 JSON
+            import base64
             for chunk in response.iter_bytes(chunk_size=4096):
-                await websocket.send_bytes(chunk)
+                encoded_chunk = base64.b64encode(chunk).decode('utf-8')
+                yield json.dumps({"type": "audio_chunk", "audio_id": "a", "chunk": encoded_chunk}) + "\n"
             
-            await websocket.send_json({"type": "audio_end", "audio_id": "a"})
+            yield json.dumps({"type": "audio_end", "audio_id": "a"}) + "\n"
         else:
-            # Stream audio for both models in parallel
-            async def stream_audio(model, audio_id):
-                await websocket.send_json({"type": "audio_start", "audio_id": audio_id, "model": model['name']})
-                
-                audio = await tts_service.generate_speech(assistant_message, model['name'])
-                
-                # Send audio in chunks
-                chunk_size = 4096
-                for i in range(0, len(audio), chunk_size):
-                    await websocket.send_bytes(audio[i:i+chunk_size])
-                
-                await websocket.send_json({"type": "audio_end", "audio_id": audio_id})
+            # Stream audio for both models sequentially (parallel would require different approach)
+            import base64
             
-            # Stream both audios in parallel
-            await asyncio.gather(
-                stream_audio(selected_models[0], "a"),
-                stream_audio(selected_models[1], "b")
-            )
+            # Generate and stream audio A
+            audio_a = await tts_service.generate_speech(assistant_message, selected_models[0]['name'])
+            chunk_size = 4096
+            for i in range(0, len(audio_a), chunk_size):
+                chunk = audio_a[i:i+chunk_size]
+                encoded_chunk = base64.b64encode(chunk).decode('utf-8')
+                yield json.dumps({"type": "audio_chunk", "audio_id": "a", "chunk": encoded_chunk}) + "\n"
+            yield json.dumps({"type": "audio_end", "audio_id": "a"}) + "\n"
+            
+            # Generate and stream audio B
+            audio_b = await tts_service.generate_speech(assistant_message, selected_models[1]['name'])
+            for i in range(0, len(audio_b), chunk_size):
+                chunk = audio_b[i:i+chunk_size]
+                encoded_chunk = base64.b64encode(chunk).decode('utf-8')
+                yield json.dumps({"type": "audio_chunk", "audio_id": "b", "chunk": encoded_chunk}) + "\n"
+            yield json.dumps({"type": "audio_end", "audio_id": "b"}) + "\n"
         
         # Update session in Supabase
         new_prompt_count = session.get('prompt_count', 0) + 1

@@ -404,134 +404,132 @@ async function sendMessage(message) {
     const placeholder = addGeneratingPlaceholder();
     
     try {
-        // Create WebSocket connection
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
+        const requestBody = { 
+            session_id: sessionId, 
+            message,
+            mode: currentMode
+        };
         
-        console.log('Connecting to WebSocket:', wsUrl);
-        websocket = new WebSocket(wsUrl);
-        websocket.binaryType = 'arraybuffer';
+        if (currentMode === 'direct' && selectedModelSingle) {
+            requestBody.model_id = selectedModelSingle;
+        } else if (currentMode === 'side-by-side' && selectedModelA && selectedModelB) {
+            requestBody.model_a_id = selectedModelA;
+            requestBody.model_b_id = selectedModelB;
+        }
+        
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
         
         let textContent = '';
         let shouldVote = false;
         let messageDiv = null;
         let modelA = null;
         let modelB = null;
+        let buffer = '';
         let currentAudioId = null;
+        let audioBuffers = { a: [], b: [] };
         
-        websocket.onopen = () => {
-            console.log('WebSocket connected');
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
             
-            const requestBody = { 
-                session_id: sessionId, 
-                message,
-                mode: currentMode
-            };
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
             
-            if (currentMode === 'direct' && selectedModelSingle) {
-                requestBody.model_id = selectedModelSingle;
-            } else if (currentMode === 'side-by-side' && selectedModelA && selectedModelB) {
-                requestBody.model_a_id = selectedModelA;
-                requestBody.model_b_id = selectedModelB;
-            }
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
             
-            websocket.send(JSON.stringify(requestBody));
-        };
-        
-        websocket.onmessage = async (event) => {
-            // Handle binary data (audio chunks)
-            if (event.data instanceof ArrayBuffer) {
-                console.log('Received audio chunk:', event.data.byteLength, 'bytes');
+            for (const line of lines) {
+                if (!line.trim()) continue;
                 
-                if (currentAudioId && audioPlayers[currentAudioId]) {
-                    const chunk = new Uint8Array(event.data);
-                    audioPlayers[currentAudioId].appendChunk(chunk);
-                }
-                return;
-            }
-            
-            // Handle JSON messages
-            try {
-                const data = JSON.parse(event.data);
-                console.log('WebSocket message:', data.type);
-                
-                if (data.type === 'text_delta') {
-                    textContent += data.content;
-                    if (!messageDiv) {
-                        placeholder.remove();
-                        messageDiv = addMessage(textContent, false);
-                    } else {
-                        const textDiv = messageDiv.querySelector('.message-text');
-                        if (textDiv) {
-                            textDiv.textContent = textContent;
+                try {
+                    const data = JSON.parse(line);
+                    
+                    if (data.type === 'text_delta') {
+                        textContent += data.content;
+                        if (!messageDiv) {
+                            placeholder.remove();
+                            messageDiv = addMessage(textContent, false);
+                        } else {
+                            const textDiv = messageDiv.querySelector('.message-text');
+                            if (textDiv) {
+                                textDiv.textContent = textContent;
+                            }
                         }
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                        
+                    } else if (data.type === 'text') {
+                        textContent = data.content;
+                        if (!messageDiv) {
+                            placeholder.remove();
+                            messageDiv = addMessage(textContent, false);
+                        }
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                        
+                    } else if (data.type === 'model_info') {
+                        modelA = data.model_a;
+                        modelB = data.model_b;
+                        console.log('Received model_info:', modelA, modelB);
+                        
+                    } else if (data.type === 'audio_chunk') {
+                        // Receive base64-encoded audio chunks
+                        const audioId = data.audio_id;
+                        const chunkData = data.chunk;
+                        
+                        if (!audioPlayers[audioId]) {
+                            audioPlayers[audioId] = new StreamingAudioPlayer();
+                        }
+                        
+                        // Decode base64 to binary
+                        const binaryString = atob(chunkData);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        
+                        audioPlayers[audioId].appendChunk(bytes);
+                        console.log(`Audio chunk for ${audioId}:`, bytes.length, 'bytes');
+                        
+                    } else if (data.type === 'audio_end') {
+                        console.log('Audio stream ended:', data.audio_id);
+                        if (audioPlayers[data.audio_id]) {
+                            audioPlayers[data.audio_id].end();
+                        }
+                        
+                    } else if (data.type === 'metadata') {
+                        shouldVote = data.should_vote;
                     }
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
                     
-                } else if (data.type === 'text') {
-                    textContent = data.content;
-                    if (!messageDiv) {
-                        placeholder.remove();
-                        messageDiv = addMessage(textContent, false);
-                    }
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                    
-                } else if (data.type === 'model_info') {
-                    modelA = data.model_a;
-                    modelB = data.model_b;
-                    console.log('Received model_info:', modelA, modelB);
-                    
-                } else if (data.type === 'audio_start') {
-                    console.log('Audio stream starting:', data.audio_id, data.model);
-                    currentAudioId = data.audio_id;
-                    audioPlayers[data.audio_id] = new StreamingAudioPlayer();
-                    
-                    // Create voice card immediately with streaming player
-                    if (!messageDiv) {
-                        placeholder.remove();
-                        messageDiv = addMessage(textContent, false);
-                    }
-                    
-                } else if (data.type === 'audio_end') {
-                    console.log('Audio stream ended:', data.audio_id);
-                    if (audioPlayers[data.audio_id]) {
-                        audioPlayers[data.audio_id].end();
-                    }
-                    currentAudioId = null;
-                    
-                } else if (data.type === 'metadata') {
-                    shouldVote = data.should_vote;
-                    
-                } else if (data.type === 'error') {
-                    console.error('Server error:', data.message);
-                    placeholder.remove();
-                    addMessage(`Error: ${data.message}`, false);
+                } catch (e) {
+                    console.error('Error parsing stream chunk:', e);
                 }
-                
+            }
+        }
+        
+        if (buffer.trim()) {
+            try {
+                const data = JSON.parse(buffer);
+                if (data.type === 'metadata') {
+                    shouldVote = data.should_vote;
+                }
             } catch (e) {
-                console.error('Error parsing WebSocket message:', e);
+                console.error('Error parsing final buffer:', e);
             }
-        };
+        }
         
-        websocket.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            placeholder.remove();
-            addMessage('Connection error. Please try again.', false);
-        };
+        if (shouldVote) {
+            showVotePrompt();
+        }
         
-        websocket.onclose = () => {
-            console.log('WebSocket closed');
-            
-            if (shouldVote) {
-                showVotePrompt();
-            }
-            
-            if (authToken) {
-                loadChatHistory();
-            }
-            
-            websocket = null;
-        };
+        if (authToken) {
+            loadChatHistory();
+        }
     } catch (error) {
         console.error('Error sending message:', error);
         placeholder.remove();
