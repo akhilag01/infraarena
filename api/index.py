@@ -515,6 +515,227 @@ async def transcribe_audio(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/chat/stream-realtime")
+async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str] = Header(None)):
+    """
+    Real-time streaming endpoint with sentence-buffered TTS generation.
+    Flow: LLM tokens → Sentence buffer → TTS generation → Audio chunks → Client
+    
+    Architecture:
+    - LLM stream produces text tokens
+    - Sentence buffer accumulates tokens until sentence boundary
+    - TTS workers process complete sentences concurrently
+    - Audio chunks stream to client as soon as generated
+    """
+    async def generate():
+        try:
+            supabase = get_supabase()
+            
+            # Get session
+            session_data = supabase.table('sessions').select('*').eq('session_id', request.session_id).single().execute()
+            if not session_data.data:
+                yield json.dumps({"type": "error", "message": "Session not found"}) + "\n"
+                return
+            
+            session = session_data.data
+            models = get_models()
+            
+            # Select models based on mode
+            if request.mode == 'direct':
+                if not request.model_id:
+                    yield json.dumps({"type": "error", "message": "model_id required for direct mode"}) + "\n"
+                    return
+                selected_models = [m for m in models if m['id'] == request.model_id]
+                if not selected_models:
+                    yield json.dumps({"type": "error", "message": "Model not found"}) + "\n"
+                    return
+            elif request.mode == 'side-by-side':
+                if request.model_a_id and request.model_b_id:
+                    model_a = next((m for m in models if m['id'] == request.model_a_id), None)
+                    model_b = next((m for m in models if m['id'] == request.model_b_id), None)
+                    if not model_a or not model_b:
+                        yield json.dumps({"type": "error", "message": "One or both models not found"}) + "\n"
+                        return
+                    selected_models = [model_a, model_b]
+                else:
+                    selected_models = random.sample(models, 2)
+            else:  # battle mode
+                selected_models = random.sample(models, 2)
+            
+            # Get conversation history
+            messages = session.get('messages', [])
+            messages.append({"role": "user", "content": request.message})
+            
+            # Initialize streaming components
+            openai_client = get_openai_client()
+            tts_service = get_tts_service()
+            
+            assistant_message = ""
+            sentence_buffer = ""
+            sentence_terminators = {'.', '!', '?', '\n'}
+            audio_chunk_id = 0
+            
+            # Sentence queue for TTS processing
+            sentence_queue = asyncio.Queue()
+            
+            # Audio output queues (one per model)
+            audio_outputs = {}
+            
+            # TTS worker for processing sentences
+            async def tts_worker(model_name, audio_label):
+                nonlocal audio_outputs
+                audio_outputs[audio_label] = []
+                
+                while True:
+                    item = await sentence_queue.get()
+                    if item is None:  # Sentinel
+                        sentence_queue.task_done()
+                        break
+                    
+                    text, chunk_id = item
+                    try:
+                        # Generate TTS audio with timeout
+                        audio_bytes = await asyncio.wait_for(
+                            tts_service.generate_speech(text, model_name),
+                            timeout=30.0  # 30 second timeout per sentence
+                        )
+                        
+                        # Store audio chunk
+                        audio_outputs[audio_label].append({
+                            "chunk_id": chunk_id,
+                            "data": audio_bytes.hex()
+                        })
+                        
+                    except asyncio.TimeoutError:
+                        print(f"TTS timeout for {audio_label} chunk {chunk_id}")
+                    except asyncio.CancelledError:
+                        print(f"TTS cancelled for {audio_label}")
+                        break
+                    except Exception as e:
+                        print(f"TTS error for {audio_label}: {e}")
+                    finally:
+                        sentence_queue.task_done()
+            
+            # Start TTS worker(s)
+            tts_tasks = []
+            if request.mode == 'direct':
+                tts_tasks.append(asyncio.create_task(tts_worker(selected_models[0]['name'], 'a')))
+            else:
+                tts_tasks.append(asyncio.create_task(tts_worker(selected_models[0]['name'], 'a')))
+                tts_tasks.append(asyncio.create_task(tts_worker(selected_models[1]['name'], 'b')))
+            
+            # Stream LLM tokens and extract sentences
+            stream = openai_client.chat.completions.create(
+                model="gpt-4",
+                messages=messages,
+                stream=True
+            )
+            
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    assistant_message += content
+                    sentence_buffer += content
+                    
+                    # Send text delta to client immediately
+                    yield json.dumps({"type": "text_delta", "content": content}) + "\n"
+                    
+                    # Check for sentence boundaries
+                    if any(term in content for term in sentence_terminators):
+                        # Extract complete sentences
+                        sentences = []
+                        temp_buffer = ""
+                        for char in sentence_buffer:
+                            temp_buffer += char
+                            if char in sentence_terminators:
+                                sentences.append(temp_buffer.strip())
+                                temp_buffer = ""
+                        
+                        # Queue complete sentences for TTS
+                        for sentence in sentences:
+                            if sentence:
+                                # Each worker will get the same sentence
+                                for _ in range(len(tts_tasks)):
+                                    await sentence_queue.put((sentence, audio_chunk_id))
+                                audio_chunk_id += 1
+                        
+                        sentence_buffer = temp_buffer
+            
+            # Process remaining buffer
+            if sentence_buffer.strip():
+                for _ in range(len(tts_tasks)):
+                    await sentence_queue.put((sentence_buffer.strip(), audio_chunk_id))
+            
+            # Stop TTS workers
+            for _ in range(len(tts_tasks)):
+                await sentence_queue.put(None)
+            
+            # Wait for TTS completion
+            await asyncio.gather(*tts_tasks)
+            
+            # Send complete text
+            yield json.dumps({"type": "text", "content": assistant_message}) + "\n"
+            messages.append({"role": "assistant", "content": assistant_message})
+            
+            # Send model info
+            if request.mode == 'direct':
+                yield json.dumps({
+                    "type": "model_info",
+                    "model_a": selected_models[0].get('display_name') or selected_models[0]['name']
+                }) + "\n"
+            else:
+                yield json.dumps({
+                    "type": "model_info",
+                    "model_a": selected_models[0].get('display_name') or selected_models[0]['name'],
+                    "model_b": selected_models[1].get('display_name') or selected_models[1]['name']
+                }) + "\n"
+            
+            # Send all audio chunks
+            if 'a' in audio_outputs:
+                for chunk_data in audio_outputs['a']:
+                    yield json.dumps({
+                        "type": "audio_chunk",
+                        "label": "a",
+                        "chunk_id": chunk_data["chunk_id"],
+                        "data": chunk_data["data"]
+                    }) + "\n"
+            
+            if 'b' in audio_outputs:
+                for chunk_data in audio_outputs['b']:
+                    yield json.dumps({
+                        "type": "audio_chunk",
+                        "label": "b",
+                        "chunk_id": chunk_data["chunk_id"],
+                        "data": chunk_data["data"]
+                    }) + "\n"
+            
+            # Update session
+            new_prompt_count = session.get('prompt_count', 0) + 1
+            update_data = {
+                'messages': messages,
+                'prompt_count': new_prompt_count,
+                'model_a_id': selected_models[0]['id'],
+                'model_b_id': selected_models[1]['id'] if len(selected_models) > 1 else None
+            }
+            
+            if new_prompt_count == 1:
+                title = request.message[:50] + ('...' if len(request.message) > 50 else '')
+                update_data['title'] = title
+            
+            supabase.table('sessions').update(update_data).eq('session_id', request.session_id).execute()
+            
+            # Send metadata
+            yield json.dumps({
+                "type": "metadata",
+                "prompt_count": new_prompt_count,
+                "should_vote": request.mode in ['battle', 'side-by-side']
+            }) + "\n"
+            
+        except Exception as e:
+            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+    
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
+
 @app.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):
     await websocket.accept()

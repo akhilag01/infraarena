@@ -164,6 +164,89 @@ class StreamingAudioPlayer {
     }
 }
 
+// Real-time streaming audio player with jitter buffer for sentence chunks
+class RealtimeAudioPlayer {
+    constructor(label) {
+        this.label = label;
+        this.chunks = []; // Ordered audio chunks
+        this.currentChunkIndex = 0;
+        this.isPlaying = false;
+        this.audioQueue = [];
+        this.currentAudio = null;
+        this.jitterBuffer = 2; // Wait for N chunks before playing
+    }
+    
+    addChunk(chunkId, hexData) {
+        // Convert hex to audio blob
+        const bytes = new Uint8Array(hexData.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+        const blob = new Blob([bytes], { type: 'audio/mpeg' });
+        const url = URL.createObjectURL(blob);
+        
+        this.chunks[chunkId] = url;
+        
+        // Start playback if we have enough buffered
+        if (!this.isPlaying && Object.keys(this.chunks).length >= this.jitterBuffer) {
+            this.startPlayback();
+        }
+    }
+    
+    startPlayback() {
+        if (this.isPlaying) return;
+        this.isPlaying = true;
+        this.playNextChunk();
+    }
+    
+    playNextChunk() {
+        if (this.currentChunkIndex >= Object.keys(this.chunks).length) {
+            this.isPlaying = false;
+            return;
+        }
+        
+        const url = this.chunks[this.currentChunkIndex];
+        if (!url) {
+            // Chunk not ready yet, wait
+            setTimeout(() => this.playNextChunk(), 50);
+            return;
+        }
+        
+        this.currentAudio = new Audio(url);
+        this.currentAudio.addEventListener('ended', () => {
+            URL.revokeObjectURL(url);
+            this.currentChunkIndex++;
+            this.playNextChunk();
+        });
+        this.currentAudio.addEventListener('error', (e) => {
+            console.error(`Error playing chunk ${this.currentChunkIndex}:`, e);
+            this.currentChunkIndex++;
+            this.playNextChunk();
+        });
+        
+        this.currentAudio.play().catch(e => console.error('Play error:', e));
+    }
+    
+    pause() {
+        if (this.currentAudio) {
+            this.currentAudio.pause();
+            this.isPlaying = false;
+        }
+    }
+    
+    resume() {
+        if (this.currentAudio && this.currentAudio.paused) {
+            this.currentAudio.play();
+            this.isPlaying = true;
+        }
+    }
+    
+    stop() {
+        this.isPlaying = false;
+        if (this.currentAudio) {
+            this.currentAudio.pause();
+            this.currentAudio = null;
+        }
+    }
+}
+
 function showScreen(screen) {
     [chatScreen, leaderboardScreen].forEach(s => s.classList.remove('active'));
     screen.classList.add('active');
@@ -625,6 +708,145 @@ async function sendMessage(message) {
     }
 }
 
+// Real-time streaming version with sentence-buffered TTS
+async function sendMessageRealtime(message) {
+    if (!message.trim() || !sessionId) return;
+    
+    addMessage(message, true);
+    messageInput.value = '';
+    
+    const placeholder = addGeneratingPlaceholder();
+    
+    // Initialize realtime audio players
+    const realtimePlayers = {};
+    
+    try {
+        const requestBody = { 
+            session_id: sessionId, 
+            message,
+            mode: currentMode
+        };
+        
+        if (currentMode === 'direct' && selectedModelSingle) {
+            requestBody.model_id = selectedModelSingle;
+        } else if (currentMode === 'side-by-side' && selectedModelA && selectedModelB) {
+            requestBody.model_a_id = selectedModelA;
+            requestBody.model_b_id = selectedModelB;
+        }
+        
+        const response = await fetch('/api/chat/stream-realtime', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        
+        let textContent = '';
+        let shouldVote = false;
+        let messageDiv = null;
+        let modelA = null;
+        let modelB = null;
+        let buffer = '';
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+            
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                
+                try {
+                    const data = JSON.parse(line);
+                    
+                    if (data.type === 'text_delta') {
+                        textContent += data.content;
+                        if (!messageDiv) {
+                            placeholder.remove();
+                            messageDiv = addMessage(textContent, false);
+                        } else {
+                            const textDiv = messageDiv.querySelector('.message-text');
+                            if (textDiv) {
+                                textDiv.textContent = textContent;
+                            }
+                        }
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                        
+                    } else if (data.type === 'text') {
+                        textContent = data.content;
+                        if (!messageDiv) {
+                            placeholder.remove();
+                            messageDiv = addMessage(textContent, false);
+                        }
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                        
+                    } else if (data.type === 'model_info') {
+                        modelA = data.model_a;
+                        modelB = data.model_b;
+                        console.log('Received model_info:', modelA, modelB);
+                        
+                    } else if (data.type === 'audio_chunk') {
+                        // Real-time audio chunk received
+                        const label = data.label;
+                        const chunkId = data.chunk_id;
+                        const hexData = data.data;
+                        
+                        // Create player if doesn't exist
+                        if (!realtimePlayers[label]) {
+                            realtimePlayers[label] = new RealtimeAudioPlayer(label);
+                            console.log(`Created realtime player for ${label}`);
+                        }
+                        
+                        // Add chunk to player (will start playing when buffer full)
+                        realtimePlayers[label].addChunk(chunkId, hexData);
+                        
+                    } else if (data.type === 'metadata') {
+                        shouldVote = data.should_vote;
+                    } else if (data.type === 'error') {
+                        console.error('Server error:', data.message);
+                    }
+                } catch (e) {
+                    console.error('Error parsing stream chunk:', e, line);
+                }
+            }
+        }
+        
+        // Process remaining buffer
+        if (buffer.trim()) {
+            try {
+                const data = JSON.parse(buffer);
+                if (data.type === 'metadata') {
+                    shouldVote = data.should_vote;
+                }
+            } catch (e) {
+                console.error('Error parsing final buffer:', e);
+            }
+        }
+        
+        if (shouldVote) {
+            showVotePrompt();
+        }
+        
+        if (authToken) {
+            loadChatHistory();
+        }
+    } catch (error) {
+        console.error('Error sending message:', error);
+        placeholder.remove();
+        addMessage('Sorry, there was an error. Please try again.', false);
+        
+        // Cleanup players on error
+        Object.values(realtimePlayers).forEach(player => player.stop());
+    }
+}
+
 function updateMessageWithAudio(messageDiv, text, audioA, audioB, modelA, modelB) {
     console.log('updateMessageWithAudio called:', { 
         mode: currentMode, 
@@ -1011,7 +1233,7 @@ async function startVoiceRecording() {
                 const data = await response.json();
                 
                 if (data.text && data.text.trim()) {
-                    sendMessage(data.text);
+                    sendMessageRealtime(data.text);
                 } else {
                     addMessage('Could not transcribe audio. Please try again.', false, 'System');
                 }
@@ -1043,13 +1265,13 @@ backBtn.addEventListener('click', () => showScreen(chatScreen));
 
 sendBtn.addEventListener('click', () => {
     const message = messageInput.value;
-    sendMessage(message);
+    sendMessageRealtime(message);
 });
 
 messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
         const message = messageInput.value;
-        sendMessage(message);
+        sendMessageRealtime(message);
     }
 });
 
