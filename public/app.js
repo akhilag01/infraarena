@@ -362,6 +362,7 @@ async function sendMessage(message) {
 }
 
 function updateMessageWithAudio(messageDiv, text, audioA, audioB, modelA, modelB) {
+    console.log('updateMessageWithAudio called:', { mode: currentMode, audioA: !!audioA, audioB: !!audioB, modelA, modelB });
     messageDiv.innerHTML = '';
     
     const textDiv = document.createElement('div');
@@ -369,7 +370,8 @@ function updateMessageWithAudio(messageDiv, text, audioA, audioB, modelA, modelB
     textDiv.textContent = text;
     messageDiv.appendChild(textDiv);
     
-    if (currentMode !== 'direct' || audioA) {
+    if (currentMode !== 'direct' && audioA && audioB) {
+        console.log('Creating voice cards for battle/side-by-side');
         const voicesContainer = document.createElement('div');
         voicesContainer.className = 'voices-container';
         
@@ -377,13 +379,25 @@ function updateMessageWithAudio(messageDiv, text, audioA, audioB, modelA, modelB
         currentVoiceCards.voiceA = voiceCardA;
         voicesContainer.appendChild(voiceCardA);
         
-        if (audioB) {
-            const voiceCardB = createVoiceCard('B', audioB, modelB);
-            currentVoiceCards.voiceB = voiceCardB;
-            voicesContainer.appendChild(voiceCardB);
-        }
+        const voiceCardB = createVoiceCard('B', audioB, modelB);
+        currentVoiceCards.voiceB = voiceCardB;
+        voicesContainer.appendChild(voiceCardB);
         
         messageDiv.appendChild(voicesContainer);
+        console.log('Voice cards added to message');
+    } else if (currentMode === 'direct' && audioA) {
+        console.log('Creating voice card for direct mode');
+        const voicesContainer = document.createElement('div');
+        voicesContainer.className = 'voices-container';
+        
+        const voiceCardA = createVoiceCard('A', audioA, modelA);
+        currentVoiceCards.voiceA = voiceCardA;
+        voicesContainer.appendChild(voiceCardA);
+        
+        messageDiv.appendChild(voicesContainer);
+        console.log('Voice card added to message');
+    } else {
+        console.log('Conditions not met for voice cards:', { currentMode, audioA: !!audioA, audioB: !!audioB });
     }
     
     chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -1109,6 +1123,106 @@ function switchMode(mode) {
     startSession();
 }
 
+function getProviderLogoPath(provider) {
+    const logoMap = {
+        'OpenAI': '/logos/openai-icon.webp',
+        'ElevenLabs': '/logos/ElevenLabs_logo.png',
+        'Deepgram': '/logos/Deepgram-wordmark-black.png',
+        'Cartesia': '/logos/cartesia-logo.svg'
+    };
+    return logoMap[provider] || '';
+}
+
+function initCustomSelect(selectElement, onChangeCallback) {
+    const trigger = selectElement.querySelector('.custom-select-trigger');
+    const optionsContainer = selectElement.querySelector('.custom-options');
+    
+    trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.querySelectorAll('.custom-select').forEach(s => {
+            if (s !== selectElement) s.classList.remove('active');
+        });
+        selectElement.classList.toggle('active');
+    });
+    
+    document.addEventListener('click', () => {
+        selectElement.classList.remove('active');
+    });
+    
+    selectElement.setOptions = (models, selectedId = null) => {
+        optionsContainer.innerHTML = '';
+        
+        models.forEach(model => {
+            const option = document.createElement('div');
+            option.className = 'custom-option';
+            option.dataset.value = model.id;
+            
+            const logoPath = getProviderLogoPath(model.provider);
+            if (logoPath) {
+                const img = document.createElement('img');
+                img.src = logoPath;
+                img.alt = model.provider;
+                img.className = 'model-logo';
+                option.appendChild(img);
+            }
+            
+            const text = document.createElement('span');
+            text.className = 'custom-option-text';
+            text.textContent = model.display_name || model.name;
+            option.appendChild(text);
+            
+            if (model.id === selectedId) {
+                option.classList.add('selected');
+            }
+            
+            option.addEventListener('click', () => {
+                optionsContainer.querySelectorAll('.custom-option').forEach(o => {
+                    o.classList.remove('selected');
+                });
+                option.classList.add('selected');
+                
+                const triggerSpan = trigger.querySelector('span');
+                triggerSpan.innerHTML = '';
+                if (logoPath) {
+                    const img = document.createElement('img');
+                    img.src = logoPath;
+                    img.alt = model.provider;
+                    img.className = 'model-logo';
+                    triggerSpan.appendChild(img);
+                }
+                const textNode = document.createTextNode(model.display_name || model.name);
+                triggerSpan.appendChild(textNode);
+                
+                selectElement.classList.remove('active');
+                
+                if (onChangeCallback) {
+                    onChangeCallback(model.id);
+                }
+            });
+            
+            optionsContainer.appendChild(option);
+        });
+        
+        if (selectedId && models.length > 0) {
+            const selectedModel = models.find(m => m.id === selectedId);
+            if (selectedModel) {
+                const triggerSpan = trigger.querySelector('span');
+                triggerSpan.innerHTML = '';
+                const logoPath = getProviderLogoPath(selectedModel.provider);
+                if (logoPath) {
+                    const img = document.createElement('img');
+                    img.src = logoPath;
+                    img.alt = selectedModel.provider;
+                    img.className = 'model-logo';
+                    triggerSpan.appendChild(img);
+                }
+                const textNode = document.createTextNode(selectedModel.display_name || selectedModel.name);
+                triggerSpan.appendChild(textNode);
+            }
+        }
+    };
+}
+
 async function loadModels() {
     try {
         const response = await fetch('/api/models');
@@ -1124,62 +1238,37 @@ async function loadModels() {
             return;
         }
         
-        const createOption = (model) => {
-            console.log('Creating option for model:', model);
-            const option = document.createElement('option');
-            option.value = model.id;
-            const displayName = model.display_name || model.name || `Model ${model.id}`;
-            option.textContent = displayName;
-            option.dataset.provider = model.provider || '';
-            option.dataset.logo = model.logo_url || '';
-            return option;
-        };
-        
         if (currentMode === 'side-by-side') {
-            headerModelSelectA.innerHTML = '';
-            headerModelSelectB.innerHTML = '';
-            availableModels.forEach(model => {
-                headerModelSelectA.appendChild(createOption(model));
-                const optionB = document.createElement('option');
-                optionB.value = model.id;
-                optionB.textContent = model.display_name || model.name;
-                optionB.dataset.provider = model.provider || '';
-                optionB.dataset.logo = model.logo_url || '';
-                headerModelSelectB.appendChild(optionB);
-            });
-            
             if (availableModels.length >= 2) {
-                selectedModelA = availableModels[0].id;
-                selectedModelB = availableModels[1].id;
-                headerModelSelectB.selectedIndex = 1;
+                selectedModelA = selectedModelA || availableModels[0].id;
+                selectedModelB = selectedModelB || availableModels[1].id;
             }
+            headerModelSelectA.setOptions(availableModels, selectedModelA);
+            headerModelSelectB.setOptions(availableModels, selectedModelB);
         } else if (currentMode === 'direct') {
-            headerModelSelectSingle.innerHTML = '';
-            availableModels.forEach(model => {
-                headerModelSelectSingle.appendChild(createOption(model));
-            });
-            
             if (availableModels.length > 0) {
-                selectedModelSingle = availableModels[0].id;
+                selectedModelSingle = selectedModelSingle || availableModels[0].id;
             }
+            headerModelSelectSingle.setOptions(availableModels, selectedModelSingle);
         }
     } catch (error) {
         console.error('Error loading models:', error);
     }
 }
 
-headerModelSelectA.addEventListener('change', (e) => {
-    selectedModelA = e.target.value;
+// Initialize custom select dropdowns
+initCustomSelect(headerModelSelectA, (modelId) => {
+    selectedModelA = modelId;
     startSession();
 });
 
-headerModelSelectB.addEventListener('change', (e) => {
-    selectedModelB = e.target.value;
+initCustomSelect(headerModelSelectB, (modelId) => {
+    selectedModelB = modelId;
     startSession();
 });
 
-headerModelSelectSingle.addEventListener('change', (e) => {
-    selectedModelSingle = e.target.value;
+initCustomSelect(headerModelSelectSingle, (modelId) => {
+    selectedModelSingle = modelId;
     startSession();
 });
 

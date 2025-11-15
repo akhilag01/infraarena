@@ -392,12 +392,22 @@ header h1 {
     display: none;
 }
 
-.header-model-select-wrapper {
+.custom-select-wrapper {
     position: relative;
 }
 
-.header-model-select {
-    padding: 8px 32px 8px 12px;
+.custom-select {
+    position: relative;
+    min-width: 200px;
+    user-select: none;
+}
+
+.custom-select-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
     background: var(--surface-elevated);
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -406,25 +416,88 @@ header h1 {
     cursor: pointer;
     transition: all 0.2s;
     font-weight: 500;
-    appearance: none;
-    min-width: 180px;
 }
 
-.header-model-select:hover {
+.custom-select-trigger:hover {
     border-color: var(--border-light);
     background: var(--surface-hover);
 }
 
-.header-model-select:focus {
-    outline: none;
+.custom-select.active .custom-select-trigger {
     border-color: var(--primary);
     box-shadow: 0 0 0 3px var(--primary-light);
 }
 
-.header-model-select option {
-    background: var(--surface);
-    color: var(--text);
-    padding: 8px 12px;
+.custom-select-trigger span {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.custom-select-trigger svg {
+    transition: transform 0.2s;
+    color: var(--text-tertiary);
+}
+
+.custom-select.active .custom-select-trigger svg {
+    transform: rotate(180deg);
+}
+
+.custom-options {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: var(--shadow-lg);
+    display: none;
+}
+
+.custom-select.active .custom-options {
+    display: block;
+}
+
+.custom-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.875rem;
+}
+
+.custom-option:hover {
+    background: var(--surface-hover);
+}
+
+.custom-option.selected {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
+.custom-option img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.custom-option-text {
+    flex: 1;
+}
+
+.model-logo {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex-shrink: 0;
 }
 
 .header-login-btn {
