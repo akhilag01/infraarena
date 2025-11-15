@@ -108,6 +108,13 @@ function addGeneratingPlaceholder() {
 }
 
 function createVoiceCard(label, audioHex, modelName) {
+    console.log('createVoiceCard called:', { label, audioHex: audioHex ? audioHex.substring(0, 50) + '...' : null, modelName });
+    
+    if (!audioHex) {
+        console.error('createVoiceCard: audioHex is null or undefined!');
+        return document.createElement('div'); // Return empty div to prevent crashes
+    }
+    
     const card = document.createElement('div');
     card.className = 'voice-card';
     card.dataset.label = label;
@@ -206,6 +213,7 @@ function createVoiceCard(label, audioHex, modelName) {
     card.appendChild(header);
     card.appendChild(controls);
     
+    console.log('Voice card created successfully');
     return card;
 }
 
