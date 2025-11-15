@@ -583,19 +583,24 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
             
             # TTS worker for processing sentences
             async def tts_worker(model_name, audio_label, sentence_queue):
+                print(f"[TTS Worker {audio_label}] Started for model: {model_name}")
                 while True:
                     item = await sentence_queue.get()
                     if item is None:  # Sentinel
+                        print(f"[TTS Worker {audio_label}] Received stop signal")
                         sentence_queue.task_done()
                         break
                     
                     text, chunk_id = item
+                    print(f"[TTS Worker {audio_label}] Processing chunk {chunk_id}: {text[:50]}...")
                     try:
                         # Generate TTS audio with timeout
                         audio_bytes = await asyncio.wait_for(
                             tts_service.generate_speech(text, model_name),
                             timeout=30.0  # 30 second timeout per sentence
                         )
+                        
+                        print(f"[TTS Worker {audio_label}] Generated {len(audio_bytes)} bytes for chunk {chunk_id}")
                         
                         # Stream audio chunk immediately to client
                         await output_queue.put({
@@ -605,15 +610,21 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                             "data": audio_bytes.hex()
                         })
                         
+                        print(f"[TTS Worker {audio_label}] Queued chunk {chunk_id} to output")
+                        
                     except asyncio.TimeoutError:
-                        print(f"TTS timeout for {audio_label} chunk {chunk_id}")
+                        print(f"[TTS Worker {audio_label}] TIMEOUT for chunk {chunk_id}")
                     except asyncio.CancelledError:
-                        print(f"TTS cancelled for {audio_label}")
+                        print(f"[TTS Worker {audio_label}] CANCELLED")
                         break
                     except Exception as e:
-                        print(f"TTS error for {audio_label}: {e}")
+                        print(f"[TTS Worker {audio_label}] ERROR for chunk {chunk_id}: {e}")
+                        import traceback
+                        traceback.print_exc()
                     finally:
                         sentence_queue.task_done()
+                
+                print(f"[TTS Worker {audio_label}] Stopped")
             
             # Start TTS worker(s) with separate queues
             tts_tasks = []
@@ -656,8 +667,10 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                         # Queue complete sentences to each TTS worker
                         for sentence in sentences:
                             if sentence:
-                                for queue in sentence_queues.values():
+                                print(f"[Main] Queuing sentence chunk {audio_chunk_id} to {len(sentence_queues)} workers: {sentence[:50]}...")
+                                for label, queue in sentence_queues.items():
                                     await queue.put((sentence, audio_chunk_id))
+                                    print(f"[Main] Queued to worker {label}")
                                 audio_chunk_id += 1
                         
                         sentence_buffer = temp_buffer
@@ -665,6 +678,7 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                     # Yield any audio chunks that are ready
                     while not output_queue.empty():
                         audio_chunk = await output_queue.get()
+                        print(f"[Main] Yielding audio chunk: label={audio_chunk['label']}, chunk_id={audio_chunk['chunk_id']}")
                         yield json.dumps(audio_chunk) + "\n"
                         output_queue.task_done()
             
