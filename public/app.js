@@ -309,15 +309,22 @@ async function sendMessage(message) {
         let messageDiv = null;
         let modelA = null;
         let modelB = null;
+        let buffer = ''; // Buffer for incomplete JSON
         
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n').filter(line => line.trim());
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+            
+            // Split by newline but keep incomplete lines in buffer
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep the last incomplete line in buffer
             
             for (const line of lines) {
+                if (!line.trim()) continue;
+                
                 try {
                     const data = JSON.parse(line);
                     
@@ -366,6 +373,19 @@ async function sendMessage(message) {
                 } catch (e) {
                     console.error('Error parsing stream chunk:', e);
                 }
+            }
+        }
+        
+        // Process any remaining buffer
+        if (buffer.trim()) {
+            try {
+                const data = JSON.parse(buffer);
+                // Handle final chunk (same logic as above)
+                if (data.type === 'metadata') {
+                    shouldVote = data.should_vote;
+                }
+            } catch (e) {
+                console.error('Error parsing final buffer:', e, 'Buffer:', buffer.substring(0, 100));
             }
         }
         
