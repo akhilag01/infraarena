@@ -97,30 +97,50 @@ class TTSService:
     async def _elevenlabs_tts(self, text: str, model: str) -> bytes:
         global _elevenlabs_client
         if _elevenlabs_client is None:
+            print("[ElevenLabs] Initializing client")
             _elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+        
+        print(f"[ElevenLabs] Starting TTS for model: {model}, text length: {len(text)}")
         
         # Run synchronous ElevenLabs API in executor to avoid blocking
         def generate_audio():
-            audio_generator = _elevenlabs_client.text_to_speech.convert(
-                text=text,
-                voice_id="EXAVITQu4vr4xnSDxMaL",
-                model_id="eleven_turbo_v2_5" if model == "eleven_v3" else model,
-                voice_settings={
-                    "stability": 0.5,
-                    "similarity_boost": 0.75,
-                    "style": 0.0,
-                    "use_speaker_boost": True
-                }
-            )
-            
-            audio_bytes = b""
-            for chunk in audio_generator:
-                audio_bytes += chunk
-            return audio_bytes
+            try:
+                print(f"[ElevenLabs] Calling API with voice_id=EXAVITQu4vr4xnSDxMaL, model_id={model}")
+                audio_generator = _elevenlabs_client.text_to_speech.convert(
+                    text=text,
+                    voice_id="EXAVITQu4vr4xnSDxMaL",
+                    model_id="eleven_turbo_v2_5" if model == "eleven_v3" else model,
+                    voice_settings={
+                        "stability": 0.5,
+                        "similarity_boost": 0.75,
+                        "style": 0.0,
+                        "use_speaker_boost": True
+                    }
+                )
+                
+                print("[ElevenLabs] Receiving audio chunks...")
+                audio_bytes = b""
+                chunk_count = 0
+                for chunk in audio_generator:
+                    audio_bytes += chunk
+                    chunk_count += 1
+                print(f"[ElevenLabs] Received {chunk_count} chunks, total: {len(audio_bytes)} bytes")
+                return audio_bytes
+            except Exception as e:
+                print(f"[ElevenLabs] ERROR in generate_audio: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
         
         # Run in thread pool to avoid blocking event loop
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, generate_audio)
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, generate_audio)
+            print(f"[ElevenLabs] Completed successfully: {len(result)} bytes")
+            return result
+        except Exception as e:
+            print(f"[ElevenLabs] ERROR in executor: {e}")
+            raise
     
     async def _deepgram_tts(self, text: str) -> bytes:
         async with httpx.AsyncClient() as client:
