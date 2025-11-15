@@ -99,6 +99,49 @@ body {
     display: none;
 }
 
+.mode-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.mode-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.mode-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+    border-color: var(--text-secondary);
+}
+
+.mode-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+.mode-btn svg {
+    flex-shrink: 0;
+}
+
+.sidebar.collapsed .mode-selector {
+    display: none;
+}
+
 .sidebar-nav {
     display: flex;
     flex-direction: column;
@@ -489,6 +532,62 @@ header h1 {
     gap: 1.5rem;
     margin-top: 0.5rem;
     width: 100%;
+}
+
+.mode-battle .voice-card .voice-label,
+.mode-battle .model-name {
+    filter: blur(4px);
+    user-select: none;
+}
+
+.mode-battle .voice-card.revealed .voice-label,
+.mode-battle .voice-card.revealed .model-name {
+    filter: none;
+}
+
+.mode-side-by-side .voice-card .voice-label,
+.mode-side-by-side .model-name {
+    filter: none;
+}
+
+.mode-direct .voices-container {
+    display: none;
+}
+
+.mode-direct .vote-prompt {
+    display: none !important;
+}
+
+.model-selector {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.model-selector label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.model-selector select {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+.model-selector select:focus {
+    outline: none;
+    border-color: var(--primary);
 }
 
 .voice-card {

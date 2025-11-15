@@ -179,6 +179,8 @@ class StartSessionRequest(BaseModel):
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    mode: Optional[str] = 'battle'
+    model_id: Optional[str] = None
 
 class VoteRequest(BaseModel):
     session_id: str
@@ -207,6 +209,11 @@ def get_tts_service():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+@app.get("/api/models")
+async def get_models_list():
+    models = get_models()
+    return {"models": models}
 
 @app.post("/api/start-session")
 async def start_session(authorization: str = Header(None)):
@@ -286,11 +293,25 @@ async def chat(request: ChatRequest):
     
     session = session_data.data
     models = get_models()
-    if len(models) < 2:
-        raise HTTPException(status_code=500, detail="Not enough TTS models available")
     
-    # Select new random models for this turn
-    selected_models = random.sample(models, 2)
+    # Mode handling
+    mode = request.mode or 'battle'
+    
+    if mode == 'direct':
+        if not request.model_id:
+            raise HTTPException(status_code=400, detail="model_id required for direct mode")
+        selected_models = [m for m in models if m['id'] == request.model_id]
+        if not selected_models:
+            raise HTTPException(status_code=404, detail="Model not found")
+        selected_models = [selected_models[0]]
+    elif mode == 'side-by-side':
+        if len(models) < 2:
+            raise HTTPException(status_code=500, detail="Not enough TTS models available")
+        selected_models = random.sample(models, 2)
+    else:
+        if len(models) < 2:
+            raise HTTPException(status_code=500, detail="Not enough TTS models available")
+        selected_models = random.sample(models, 2)
     
     # Get current messages
     messages = session.get('messages', [])
@@ -310,23 +331,38 @@ async def chat(request: ChatRequest):
         # Send text immediately
         yield json.dumps({"type": "text", "content": assistant_message}) + "\n"
         
-        # Generate TTS audio in parallel and stream as they complete
+        # Generate TTS audio
         tts_service = get_tts_service()
-        tasks = {
-            'audio_a': asyncio.create_task(tts_service.generate_speech(assistant_message, selected_models[0]['name'])),
-            'audio_b': asyncio.create_task(tts_service.generate_speech(assistant_message, selected_models[1]['name']))
-        }
         
-        # Stream whichever audio finishes first
-        pending = set(tasks.values())
-        task_names = {v: k for k, v in tasks.items()}
-        
-        while pending:
-            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
-            for task in done:
-                audio_data = await task
-                audio_key = task_names[task]
-                yield json.dumps({"type": audio_key, "content": audio_data.hex()}) + "\n"
+        if mode == 'direct':
+            audio = await tts_service.generate_speech(assistant_message, selected_models[0]['name'])
+            yield json.dumps({"type": "audio_a", "content": audio.hex()}) + "\n"
+            yield json.dumps({
+                "type": "model_info",
+                "model_a": selected_models[0]['display_name']
+            }) + "\n"
+        else:
+            tasks = {
+                'audio_a': asyncio.create_task(tts_service.generate_speech(assistant_message, selected_models[0]['name'])),
+                'audio_b': asyncio.create_task(tts_service.generate_speech(assistant_message, selected_models[1]['name']))
+            }
+            
+            pending = set(tasks.values())
+            task_names = {v: k for k, v in tasks.items()}
+            
+            while pending:
+                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    audio_data = await task
+                    audio_key = task_names[task]
+                    yield json.dumps({"type": audio_key, "content": audio_data.hex()}) + "\n"
+            
+            if mode == 'side-by-side':
+                yield json.dumps({
+                    "type": "model_info",
+                    "model_a": selected_models[0]['display_name'],
+                    "model_b": selected_models[1]['display_name']
+                }) + "\n"
         
         # Update session in Supabase
         new_prompt_count = session.get('prompt_count', 0) + 1
@@ -334,7 +370,7 @@ async def chat(request: ChatRequest):
             'messages': messages,
             'prompt_count': new_prompt_count,
             'model_a_id': selected_models[0]['id'],
-            'model_b_id': selected_models[1]['id']
+            'model_b_id': selected_models[1]['id'] if len(selected_models) > 1 else None
         }
         
         # Set title to first message if this is the first prompt
@@ -348,7 +384,7 @@ async def chat(request: ChatRequest):
         yield json.dumps({
             "type": "metadata",
             "prompt_count": new_prompt_count,
-            "should_vote": True
+            "should_vote": mode in ['battle', 'side-by-side']
         }) + "\n"
     
     return StreamingResponse(stream_response(), media_type="application/x-ndjson")

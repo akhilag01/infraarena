@@ -4,6 +4,9 @@ let audioChunks = [];
 let isRecording = false;
 let currentUser = null;
 let authToken = null;
+let currentMode = 'battle';
+let selectedModel = null;
+let availableModels = [];
 
 const chatScreen = document.getElementById('chat-screen');
 const leaderboardScreen = document.getElementById('leaderboard-screen');
@@ -13,6 +16,8 @@ const sendBtn = document.getElementById('send-btn');
 const voiceBtn = document.getElementById('voice-btn');
 const chatMessages = document.getElementById('chat-messages');
 const votePrompt = document.getElementById('vote-prompt');
+const modelSelector = document.getElementById('model-selector');
+const modelSelect = document.getElementById('model-select');
 
 const loginBtn = document.getElementById('login-btn');
 const headerLoginBtn = document.getElementById('header-login-btn');
@@ -96,14 +101,18 @@ function addGeneratingPlaceholder() {
     return messageDiv;
 }
 
-function createVoiceCard(label, audioHex) {
+function createVoiceCard(label, audioHex, modelName) {
     const card = document.createElement('div');
     card.className = 'voice-card';
     card.dataset.label = label;
     
     const header = document.createElement('div');
     header.className = 'voice-card-header';
-    header.innerHTML = `<span class="voice-label">Voice ${label}</span>`;
+    const labelText = modelName && currentMode === 'side-by-side' ? modelName : `Voice ${label}`;
+    header.innerHTML = `<span class="voice-label">${labelText}</span>`;
+    if (modelName) {
+        header.innerHTML += `<span class="model-name">${modelName}</span>`;
+    }
     
     const audioBytes = new Uint8Array(audioHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
     const audioBlob = new Blob([audioBytes], { type: 'audio/mpeg' });
@@ -257,10 +266,20 @@ async function sendMessage(message) {
     const placeholder = addGeneratingPlaceholder();
     
     try {
+        const requestBody = { 
+            session_id: sessionId, 
+            message,
+            mode: currentMode
+        };
+        
+        if (currentMode === 'direct' && selectedModel) {
+            requestBody.model_id = selectedModel;
+        }
+        
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: sessionId, message })
+            body: JSON.stringify(requestBody)
         });
         
         const reader = response.body.getReader();
@@ -271,6 +290,8 @@ async function sendMessage(message) {
         let audioB = null;
         let shouldVote = false;
         let messageDiv = null;
+        let modelA = null;
+        let modelB = null;
         
         while (true) {
             const { done, value } = await reader.read();
@@ -290,14 +311,19 @@ async function sendMessage(message) {
                         chatMessages.scrollTop = chatMessages.scrollHeight;
                     } else if (data.type === 'audio_a') {
                         audioA = data.content;
-                        if (messageDiv && audioA && audioB) {
-                            updateMessageWithAudio(messageDiv, textContent, audioA, audioB);
+                        if (currentMode === 'direct' && messageDiv) {
+                            updateMessageWithAudio(messageDiv, textContent, audioA, null, modelA, modelB);
+                        } else if (messageDiv && audioA && audioB) {
+                            updateMessageWithAudio(messageDiv, textContent, audioA, audioB, modelA, modelB);
                         }
                     } else if (data.type === 'audio_b') {
                         audioB = data.content;
                         if (messageDiv && audioA && audioB) {
-                            updateMessageWithAudio(messageDiv, textContent, audioA, audioB);
+                            updateMessageWithAudio(messageDiv, textContent, audioA, audioB, modelA, modelB);
                         }
+                    } else if (data.type === 'model_info') {
+                        modelA = data.model_a;
+                        modelB = data.model_b;
                     } else if (data.type === 'metadata') {
                         shouldVote = data.should_vote;
                     }
@@ -321,7 +347,7 @@ async function sendMessage(message) {
     }
 }
 
-function updateMessageWithAudio(messageDiv, text, audioA, audioB) {
+function updateMessageWithAudio(messageDiv, text, audioA, audioB, modelA, modelB) {
     messageDiv.innerHTML = '';
     
     const textDiv = document.createElement('div');
@@ -329,18 +355,22 @@ function updateMessageWithAudio(messageDiv, text, audioA, audioB) {
     textDiv.textContent = text;
     messageDiv.appendChild(textDiv);
     
-    const voicesContainer = document.createElement('div');
-    voicesContainer.className = 'voices-container';
-    
-    const voiceCardA = createVoiceCard('A', audioA);
-    const voiceCardB = createVoiceCard('B', audioB);
-    
-    currentVoiceCards.voiceA = voiceCardA;
-    currentVoiceCards.voiceB = voiceCardB;
-    
-    voicesContainer.appendChild(voiceCardA);
-    voicesContainer.appendChild(voiceCardB);
-    messageDiv.appendChild(voicesContainer);
+    if (currentMode !== 'direct' || audioA) {
+        const voicesContainer = document.createElement('div');
+        voicesContainer.className = 'voices-container';
+        
+        const voiceCardA = createVoiceCard('A', audioA, modelA);
+        currentVoiceCards.voiceA = voiceCardA;
+        voicesContainer.appendChild(voiceCardA);
+        
+        if (audioB) {
+            const voiceCardB = createVoiceCard('B', audioB, modelB);
+            currentVoiceCards.voiceB = voiceCardB;
+            voicesContainer.appendChild(voiceCardB);
+        }
+        
+        messageDiv.appendChild(voicesContainer);
+    }
     
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -1036,6 +1066,55 @@ if (storedToken) {
     handleOAuthCallback();
     loadChatHistory();
 }
+
+// Mode switching
+document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const mode = btn.dataset.mode;
+        switchMode(mode);
+    });
+});
+
+function switchMode(mode) {
+    currentMode = mode;
+    
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+    
+    chatScreen.className = 'screen active mode-' + mode;
+    
+    if (mode === 'direct') {
+        modelSelector.classList.remove('hidden');
+        loadModels();
+    } else {
+        modelSelector.classList.add('hidden');
+    }
+    
+    startSession();
+}
+
+async function loadModels() {
+    try {
+        const response = await fetch('/api/models');
+        const data = await response.json();
+        availableModels = data.models;
+        
+        modelSelect.innerHTML = availableModels.map(model => 
+            `<option value="${model.id}">${model.display_name}</option>`
+        ).join('');
+        
+        if (availableModels.length > 0) {
+            selectedModel = availableModels[0].id;
+        }
+    } catch (error) {
+        console.error('Error loading models:', error);
+    }
+}
+
+modelSelect.addEventListener('change', (e) => {
+    selectedModel = e.target.value;
+});
 
 startSession();
 updateActiveNav(navChat);

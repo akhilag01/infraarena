@@ -19,6 +19,26 @@
             </svg>
             <span>New Chat</span>
         </button>
+        <div class="mode-selector">
+            <button class="mode-btn active" data-mode="battle">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 2l2 6h6l-5 4 2 6-5-4-5 4 2-6-5-4h6l2-6z"/>
+                </svg>
+                Battle
+            </button>
+            <button class="mode-btn" data-mode="side-by-side">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M2 2h7v16H2V2zm9 0h7v16h-7V2z"/>
+                </svg>
+                Side-by-side
+            </button>
+            <button class="mode-btn" data-mode="direct">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M6 2a2 2 0 00-2 2v9a2 2 0 002 2h8l4 4V4a2 2 0 00-2-2H6z"/>
+                </svg>
+                Direct Chat
+            </button>
+        </div>
         <nav class="sidebar-nav">
             <button class="nav-item active" id="nav-chat">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
@@ -86,6 +106,12 @@
 
             <main id="main-content">
             <div id="chat-screen" class="screen active">
+                <div id="model-selector" class="model-selector hidden">
+                    <label for="model-select">Select Model:</label>
+                    <select id="model-select">
+                        <option value="">Loading models...</option>
+                    </select>
+                </div>
                 <div id="chat-messages" class="chat-messages"></div>
                 
                 <div id="vote-prompt" class="vote-prompt hidden">
