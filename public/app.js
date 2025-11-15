@@ -945,6 +945,60 @@ async function sendMessageRealtime(message) {
                         modelB = data.model_b;
                         console.log('Received model_info:', modelA, modelB);
                         
+                        // Create voice cards immediately when we know the models
+                        if (messageDiv && currentMode !== 'direct') {
+                            let voicesContainer = messageDiv.querySelector('.voices-container');
+                            if (!voicesContainer) {
+                                voicesContainer = document.createElement('div');
+                                voicesContainer.className = 'voices-container';
+                                messageDiv.appendChild(voicesContainer);
+                                
+                                // Create both voice cards upfront
+                                const voiceCardA = document.createElement('div');
+                                voiceCardA.className = 'voice-card';
+                                voiceCardA.dataset.label = 'a';
+                                
+                                const headerA = document.createElement('div');
+                                headerA.className = 'voice-card-header';
+                                headerA.innerHTML = `<span class="voice-label">${modelA}</span>`;
+                                voiceCardA.appendChild(headerA);
+                                
+                                const voiceCardB = document.createElement('div');
+                                voiceCardB.className = 'voice-card';
+                                voiceCardB.dataset.label = 'b';
+                                
+                                const headerB = document.createElement('div');
+                                headerB.className = 'voice-card-header';
+                                headerB.innerHTML = `<span class="voice-label">${modelB}</span>`;
+                                voiceCardB.appendChild(headerB);
+                                
+                                voicesContainer.appendChild(voiceCardA);
+                                voicesContainer.appendChild(voiceCardB);
+                                
+                                console.log('Voice cards created for both models');
+                            }
+                        } else if (messageDiv && currentMode === 'direct') {
+                            let voicesContainer = messageDiv.querySelector('.voices-container');
+                            if (!voicesContainer) {
+                                voicesContainer = document.createElement('div');
+                                voicesContainer.className = 'voices-container';
+                                messageDiv.appendChild(voicesContainer);
+                                
+                                const voiceCardA = document.createElement('div');
+                                voiceCardA.className = 'voice-card';
+                                voiceCardA.dataset.label = 'a';
+                                
+                                const headerA = document.createElement('div');
+                                headerA.className = 'voice-card-header';
+                                headerA.innerHTML = `<span class="voice-label">${modelA}</span>`;
+                                voiceCardA.appendChild(headerA);
+                                
+                                voicesContainer.appendChild(voiceCardA);
+                                
+                                console.log('Voice card created for direct mode');
+                            }
+                        }
+                        
                     } else if (data.type === 'audio_chunk') {
                         // Real-time audio chunk received
                         const label = data.label;
@@ -953,30 +1007,13 @@ async function sendMessageRealtime(message) {
                         
                         // Create player if doesn't exist
                         if (!realtimePlayers[label]) {
-                            // First, create voice card in UI
+                            // Find the existing voice card
                             let voiceCard = null;
                             if (messageDiv) {
-                                let voicesContainer = messageDiv.querySelector('.voices-container');
-                                if (!voicesContainer) {
-                                    voicesContainer = document.createElement('div');
-                                    voicesContainer.className = 'voices-container';
-                                    messageDiv.appendChild(voicesContainer);
+                                const voicesContainer = messageDiv.querySelector('.voices-container');
+                                if (voicesContainer) {
+                                    voiceCard = voicesContainer.querySelector(`[data-label="${label}"]`);
                                 }
-                                
-                                // Create voice card with header
-                                voiceCard = document.createElement('div');
-                                voiceCard.className = 'voice-card';
-                                voiceCard.dataset.label = label;
-                                
-                                const header = document.createElement('div');
-                                header.className = 'voice-card-header';
-                                const labelText = label === 'a' ? (modelA || 'Voice A') : (modelB || 'Voice B');
-                                header.innerHTML = `<span class="voice-label">${labelText}</span>`;
-                                
-                                voiceCard.appendChild(header);
-                                voicesContainer.appendChild(voiceCard);
-                                
-                                console.log(`Voice card created for ${label}`);
                             }
                             
                             // Create progressive audio player with the voice card
@@ -996,6 +1033,11 @@ async function sendMessageRealtime(message) {
                                 player.complete();
                             }
                         });
+                        
+                        // Show vote prompt immediately if needed
+                        if (shouldVote) {
+                            showVotePrompt();
+                        }
                     } else if (data.type === 'error') {
                         console.error('Server error:', data.message);
                     }
