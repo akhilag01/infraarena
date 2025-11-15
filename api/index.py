@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from openai import OpenAI
 from elevenlabs import ElevenLabs
 from supabase import create_client, Client
-from arena.arena_base import TTSModelName
+from arena.types import TTSModelName
 
 # Initialize clients lazily
 _supabase_client = None

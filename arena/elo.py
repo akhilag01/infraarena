@@ -1,4 +1,4 @@
-from arena.arena_base import VoteOutcome
+from arena.types import VoteOutcome
 
 
 # ELO calculation functions

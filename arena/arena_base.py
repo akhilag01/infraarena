@@ -1,33 +1,9 @@
 from typing import Generic, TypeVar, Protocol, Callable
-from enum import Enum
+from arena.types import VoteOutcome, TTSModelName
 from arena.elo import calculate_team_elo_from_vote, calculate_elo_from_vote
 
 TInput = TypeVar("TInput")
 TOutput = TypeVar("TOutput")
-
-
-class VoteOutcome(Enum):
-    A = "A"
-    B = "B"
-    TIE = "tie"
-    BOTH_BAD = "both_bad"
-
-
-class TTSModelName(str, Enum):
-    """Enum for all available TTS model names with their providers."""
-
-    # OpenAI models
-    TTS_1 = "tts-1"
-
-    # ElevenLabs models
-    ELEVEN_V3 = "eleven_v3"
-    ELEVEN_MULTILINGUAL_V2 = "eleven_multilingual_v2"
-
-    # Deepgram models
-    AURA_2_THALIA_EN = "aura-2-thalia-en"
-
-    # Cartesia models
-    SONIC_3 = "sonic-3"
 
 
 class Model(Protocol[TInput, TOutput]):
