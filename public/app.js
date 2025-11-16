@@ -1785,10 +1785,14 @@ logoutBtn.addEventListener('click', async () => {
                 }
             });
         }
+        authToken = null;
         localStorage.removeItem('authToken');
         updateUIForUser(null);
     } catch (error) {
         console.error('Logout error:', error);
+        authToken = null;
+        localStorage.removeItem('authToken');
+        updateUIForUser(null);
     }
 });
 
@@ -1818,16 +1822,25 @@ function handleOAuthCallback() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ code: code })
         })
-        .then(res => res.json())
+        .then(res => {
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+            }
+            return res.json();
+        })
         .then(data => {
             console.log('Code exchange response:', data);
             if (data.access_token) {
                 accessToken = data.access_token;
                 verifyAndUpdateUser(accessToken);
+            } else {
+                console.error('No access token in response:', data);
+                window.history.replaceState({}, document.title, window.location.pathname);
             }
         })
         .catch(err => {
             console.error('Error exchanging code:', err);
+            window.history.replaceState({}, document.title, window.location.pathname);
         });
     } else if (accessToken) {
         console.log('Found access token directly, verifying...');
@@ -1867,7 +1880,12 @@ function verifyAndUpdateUser(accessToken) {
 
 // Check for existing auth token on load
 const storedToken = localStorage.getItem('authToken');
-if (storedToken) {
+
+// Always check for OAuth callback first (handles redirect from Google)
+const hasOAuthParams = window.location.hash.includes('access_token') || window.location.search.includes('code=');
+if (hasOAuthParams) {
+    handleOAuthCallback();
+} else if (storedToken) {
     fetch('/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1880,17 +1898,17 @@ if (storedToken) {
             updateUIForUser(data.user);
         } else {
             localStorage.removeItem('authToken');
+            authToken = null;
         }
     })
     .catch(() => {
         localStorage.removeItem('authToken');
+        authToken = null;
         loadChatHistory();
     });
-} else {
-    // Check for OAuth callback
-    handleOAuthCallback();
-    loadChatHistory();
 }
+
+loadChatHistory();
 
 // Mode switching
 document.querySelectorAll('.mode-btn').forEach(btn => {

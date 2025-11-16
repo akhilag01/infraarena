@@ -1171,7 +1171,6 @@ async def login(auth_request: AuthRequest):
 async def google_auth():
     supabase = get_supabase()
     try:
-        # Use infrafield.app as the primary domain
         response = supabase.auth.sign_in_with_oauth({
             "provider": "google",
             "options": {
