@@ -89,12 +89,13 @@ class TTSService:
         elif model_name == TTSModelName.SONIC_3:
             print("[TTSService] Using Cartesia TTS")
             return await self._cartesia_tts(text)
-        elif model_name == TTSModelName.SUNO_BARK:
-            print("[TTSService] Using Suno Bark TTS")
-            return await self._replicate_bark_tts(text)
-        elif model_name == TTSModelName.SESAME_CSM_1B:
-            print("[TTSService] Using Sesame CSM-1B TTS")
-            return await self._replicate_csm_tts(text)
+        # Uncomment to enable Replicate models (requires Pro plan for 180s timeout)
+        # elif model_name == TTSModelName.SUNO_BARK:
+        #     print("[TTSService] Using Suno Bark TTS")
+        #     return await self._replicate_bark_tts(text)
+        # elif model_name == TTSModelName.SESAME_CSM_1B:
+        #     print("[TTSService] Using Sesame CSM-1B TTS")
+        #     return await self._replicate_csm_tts(text)
         else:
             print(f"[TTSService] ERROR: No handler for model: {model_name}")
             raise ValueError(f"Unknown model: {model_name}")
