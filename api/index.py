@@ -635,7 +635,7 @@ async def chat(request: ChatRequest):
             'messages': messages,
             'prompt_count': new_prompt_count,
             'model_a_id': selected_models[0]['id'],
-            'model_b_id': selected_models[1]['id'] if len(selected_models) > 1 else None
+            'model_b_id': selected_models[1]['id'] if len(selected_models) > 1 else selected_models[0]['id']
         }
         
         # Set title to first message if this is the first prompt
@@ -997,7 +997,7 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                 'messages': messages,
                 'prompt_count': new_prompt_count,
                 'model_a_id': selected_models[0]['id'],
-                'model_b_id': selected_models[1]['id'] if len(selected_models) > 1 else None
+                'model_b_id': selected_models[1]['id'] if len(selected_models) > 1 else selected_models[0]['id']
             }
             
             if new_prompt_count == 1:
@@ -1136,7 +1136,7 @@ async def websocket_chat(websocket: WebSocket):
             'messages': messages,
             'prompt_count': new_prompt_count,
             'model_a_id': selected_models[0]['id'],
-            'model_b_id': selected_models[1]['id'] if len(selected_models) > 1 else None
+            'model_b_id': selected_models[1]['id'] if len(selected_models) > 1 else selected_models[0]['id']
         }
         
         if new_prompt_count == 1:
