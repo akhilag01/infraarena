@@ -1264,7 +1264,7 @@ function getProviderLogo(provider) {
         'Deepgram': '<img src="/logos/Deepgram-wordmark-black.png" alt="Deepgram">',
         'Cartesia': '<img src="/logos/cartesia-logo.svg" alt="Cartesia">',
         'Suno': '<img src="/logos/suno-logo.png" alt="Suno">',
-        'Sesame': '<img src="/logos/sesame-logo.png" alt="Sesame">',
+        'Sesame': '<img src="/logos/sesame-logo.svg" alt="Sesame">',
         'MiniMax': '<img src="/logos/minimax-logo.png" alt="MiniMax">',
         'Canopy': '<img src="/logos/canopy-logo.png" alt="Canopy">'
     };
@@ -1983,7 +1983,7 @@ function getProviderLogoPath(provider) {
         'Deepgram': '/logos/Deepgram-wordmark-black.png',
         'Cartesia': '/logos/cartesia-logo.svg',
         'Suno': '/logos/suno-logo.png',
-        'Sesame': '/logos/sesame-logo.png',
+        'Sesame': '/logos/sesame-logo.svg',
         'MiniMax': '/logos/minimax-logo.png',
         'Canopy': '/logos/canopy-logo.png'
     };
