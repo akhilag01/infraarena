@@ -1237,7 +1237,8 @@ function getProviderLogo(provider) {
         'Cartesia': '<img src="/logos/cartesia-logo.svg" alt="Cartesia">',
         'Suno': '<img src="/logos/suno-logo.png" alt="Suno">',
         'Sesame': '<img src="/logos/sesame-logo.png" alt="Sesame">',
-        'MiniMax': '<img src="/logos/minimax-logo.png" alt="MiniMax">'
+        'MiniMax': '<img src="/logos/minimax-logo.png" alt="MiniMax">',
+        'Canopy': '<img src="/logos/canopy-logo.png" alt="Canopy">'
     };
     return logos[provider] || '';
 }
@@ -1953,7 +1954,8 @@ function getProviderLogoPath(provider) {
         'Cartesia': '/logos/cartesia-logo.svg',
         'Suno': '/logos/suno-logo.png',
         'Sesame': '/logos/sesame-logo.png',
-        'MiniMax': '/logos/minimax-logo.png'
+        'MiniMax': '/logos/minimax-logo.png',
+        'Canopy': '/logos/canopy-logo.png'
     };
     return logoMap[provider] || '';
 }

@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from openai import OpenAI
 from elevenlabs import ElevenLabs
 from supabase import create_client, Client
+from gradio_client import Client as GradioClient
 from arena.types import TTSModelName
 
 # Initialize clients lazily
@@ -92,6 +93,9 @@ class TTSService:
         elif model_name == TTSModelName.MINIMAX_SPEECH_02:
             print("[TTSService] Using MiniMax Speech-02 TTS")
             return await self._minimax_speech_tts(text)
+        elif model_name == TTSModelName.ORPHEUS_TTS:
+            print("[TTSService] Using Orpheus TTS (Canopy)")
+            return await self._orpheus_tts(text)
         # Uncomment to enable Replicate models (requires Pro plan for 180s timeout)
         # elif model_name == TTSModelName.SUNO_BARK:
         #     print("[TTSService] Using Suno Bark TTS")
@@ -348,6 +352,43 @@ class TTSService:
                     raise Exception(f"MiniMax generation failed: {status.get('error')}")
             
             raise Exception("MiniMax generation timed out")
+    
+    async def _orpheus_tts(self, text: str) -> bytes:
+        print(f"[Orpheus TTS] Starting TTS for text: {text[:50]}...")
+        
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                self._orpheus_sync_call,
+                text
+            )
+            return result
+        except Exception as e:
+            print(f"[Orpheus TTS] Error: {e}")
+            raise
+    
+    def _orpheus_sync_call(self, text: str) -> bytes:
+        client = GradioClient("MohamedRashad/Orpheus-TTS")
+        result = client.predict(
+            text=text,
+            voice="tara",
+            temperature=0.1,
+            top_p=0.1,
+            repetition_penalty=1.0,
+            max_new_tokens=50,
+            api_name="/generate_speech"
+        )
+        
+        audio_path = result
+        if isinstance(result, tuple):
+            audio_path = result[0]
+        
+        with open(audio_path, 'rb') as f:
+            audio_bytes = f.read()
+        
+        print(f"[Orpheus TTS] Success! {len(audio_bytes)} bytes")
+        return audio_bytes
 
 # Initialize app
 app = FastAPI(title="Voice Arena")
@@ -1174,7 +1215,11 @@ async def google_auth():
         response = supabase.auth.sign_in_with_oauth({
             "provider": "google",
             "options": {
-                "redirect_to": "https://infrafield.app"
+                "redirect_to": "https://infrafield.app",
+                "query_params": {
+                    "access_type": "offline",
+                    "prompt": "consent"
+                }
             }
         })
         return response

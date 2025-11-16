@@ -28,3 +28,6 @@ class TTSModelName(str, Enum):
     SUNO_BARK = "suno-bark"
     SESAME_CSM_1B = "sesame-csm-1b"
     MINIMAX_SPEECH_02 = "minimax-speech-02"
+    
+    # Gradio/HuggingFace models
+    ORPHEUS_TTS = "orpheus-tts"
