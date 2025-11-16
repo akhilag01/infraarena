@@ -619,8 +619,9 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
             
             assistant_message = ""
             sentence_buffer = ""
-            sentence_terminators = {'.', '!', '?', '\n'}
+            sentence_terminators = {'.', '!', '?', '\n', ',', ';', ':'}
             audio_chunk_id = 0
+            min_chunk_length = 20
             
             # Separate sentence queues for each TTS worker
             sentence_queues = {}
@@ -644,7 +645,7 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                         print(f"[TTS Worker {audio_label}] Calling generate_speech for {model_name}...")
                         audio_bytes = await asyncio.wait_for(
                             tts_service.generate_speech(text, model_name),
-                            timeout=60.0
+                            timeout=30.0
                         )
                         
                         if audio_bytes and len(audio_bytes) > 0:
@@ -732,22 +733,19 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                     
                     # Check for sentence boundaries
                     if any(term in content for term in sentence_terminators):
-                        # Extract complete sentences
                         sentences = []
                         temp_buffer = ""
                         for char in sentence_buffer:
                             temp_buffer += char
-                            if char in sentence_terminators:
+                            if char in sentence_terminators and len(temp_buffer.strip()) >= min_chunk_length:
                                 sentences.append(temp_buffer.strip())
                                 temp_buffer = ""
                         
-                        # Queue complete sentences to each TTS worker
                         for sentence in sentences:
-                            if sentence:
-                                print(f"[Main] Queuing sentence chunk {audio_chunk_id} to {len(sentence_queues)} workers: {sentence[:50]}...")
+                            if sentence and len(sentence) >= min_chunk_length:
+                                print(f"[Main] Queuing chunk {audio_chunk_id}: {sentence[:50]}...")
                                 for label, queue in sentence_queues.items():
                                     await queue.put((sentence, audio_chunk_id))
-                                    print(f"[Main] Queued to worker {label}")
                                 audio_chunk_id += 1
                         
                         sentence_buffer = temp_buffer
