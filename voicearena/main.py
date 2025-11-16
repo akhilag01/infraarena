@@ -17,7 +17,7 @@ from supabase_client import supabase, get_user_from_token
 from openai import OpenAI
 import os
 
-app = FastAPI(title="Voice Arena")
+app = FastAPI(title="InfraField")
 
 app.add_middleware(
     CORSMiddleware,

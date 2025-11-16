@@ -190,7 +190,7 @@ class TTSService:
             return response.content
 
 # Initialize app
-app = FastAPI(title="Voice Arena")
+app = FastAPI(title="InfraField")
 
 app.add_middleware(
     CORSMiddleware,

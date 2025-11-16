@@ -449,7 +449,7 @@ class TTSService:
         return audio_bytes
 
 # Initialize app
-app = FastAPI(title="Voice Arena")
+app = FastAPI(title="InfraField")
 
 # Log startup
 print("=" * 80)
