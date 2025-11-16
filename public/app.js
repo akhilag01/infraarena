@@ -304,6 +304,16 @@ class ProgressiveAudioPlayer {
             const latency = Date.now() - this.startTime;
             console.log(`[Player ${this.label}] Chunk ${chunkId} received (${latency}ms), ${bytes.length} bytes`);
             
+            // Detect WAV format (RIFF header) and use blob URL fallback
+            if (chunkId === 0 && bytes.length >= 4) {
+                const header = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
+                if (header === 'RIFF') {
+                    console.log(`[Player ${this.label}] Detected WAV format, using blob URL fallback`);
+                    this.useWavFallback(bytes);
+                    return;
+                }
+            }
+            
             if (this.voiceCard) {
                 this.voiceCard.classList.remove('loading');
             }
@@ -381,6 +391,24 @@ class ProgressiveAudioPlayer {
             this.isUserPaused = true;
             this.audioElement.pause();
         }
+    }
+    
+    useWavFallback(bytes) {
+        const blob = new Blob([bytes], { type: 'audio/wav' });
+        const url = URL.createObjectURL(blob);
+        
+        this.audioElement.pause();
+        URL.revokeObjectURL(this.audioElement.src);
+        
+        this.audioElement.src = url;
+        this.audioElement.load();
+        
+        if (this.voiceCard) {
+            this.voiceCard.classList.remove('loading');
+        }
+        
+        this.isStreamComplete = true;
+        console.log(`[Player ${this.label}] WAV fallback ready, ${bytes.length} bytes`);
     }
     
     complete() {
