@@ -739,7 +739,7 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                         print(f"[TTS Worker {audio_label}] Calling generate_speech for {model_name}...")
                         audio_bytes = await asyncio.wait_for(
                             tts_service.generate_speech(text, model_name),
-                            timeout=30.0
+                            timeout=180.0
                         )
                         
                         if audio_bytes and len(audio_bytes) > 0:
