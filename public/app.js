@@ -1266,7 +1266,8 @@ function getProviderLogo(provider) {
         'Suno': '<img src="/logos/suno-logo.png" alt="Suno">',
         'Sesame': '<img src="/logos/sesame-logo.svg" alt="Sesame">',
         'MiniMax': '<img src="/logos/minimax-logo.png" alt="MiniMax">',
-        'Canopy': '<img src="/logos/canopy-logo.png" alt="Canopy">'
+        'Canopy': '<img src="/logos/canopy-logo.png" alt="Canopy">',
+        'Kokoro': '<img src="/logos/kokoro-logo.png" alt="Kokoro">'
     };
     return logos[provider] || '';
 }
@@ -1985,7 +1986,8 @@ function getProviderLogoPath(provider) {
         'Suno': '/logos/suno-logo.png',
         'Sesame': '/logos/sesame-logo.svg',
         'MiniMax': '/logos/minimax-logo.png',
-        'Canopy': '/logos/canopy-logo.png'
+        'Canopy': '/logos/canopy-logo.png',
+        'Kokoro': '/logos/kokoro-logo.png'
     };
     return logoMap[provider] || '';
 }

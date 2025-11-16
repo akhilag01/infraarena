@@ -96,6 +96,9 @@ class TTSService:
         elif model_name == TTSModelName.ORPHEUS_TTS:
             print("[TTSService] Using Orpheus TTS (Canopy)")
             return await self._orpheus_tts(text)
+        elif model_name == TTSModelName.KOKORO_82M:
+            print("[TTSService] Using Kokoro TTS")
+            return await self._kokoro_tts(text)
         # Uncomment to enable Replicate models (requires Pro plan for 180s timeout)
         # elif model_name == TTSModelName.SUNO_BARK:
         #     print("[TTSService] Using Suno Bark TTS")
@@ -367,6 +370,55 @@ class TTSService:
         except Exception as e:
             print(f"[Orpheus TTS] Error: {e}")
             raise
+    
+    async def _kokoro_tts(self, text: str) -> bytes:
+        api_token = os.getenv("REPLICATE_API_TOKEN")
+        if not api_token:
+            raise ValueError("REPLICATE_API_TOKEN not set")
+        
+        print(f"[Kokoro TTS] Starting TTS for text: {text[:50]}...")
+        
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                "https://api.replicate.com/v1/predictions",
+                headers={
+                    "Authorization": f"Token {api_token}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "version": "f559560eb822dc509045f3921a1921234918b91739db4bf3daab2169b71c7a13",
+                    "input": {
+                        "text": text,
+                        "voice": "af_nicole"
+                    }
+                }
+            )
+            
+            if response.status_code != 201:
+                raise Exception(f"Replicate API error: {response.status_code} - {response.text}")
+            
+            prediction = response.json()
+            prediction_url = prediction["urls"]["get"]
+            
+            for _ in range(60):
+                await asyncio.sleep(2)
+                status_response = await client.get(
+                    prediction_url,
+                    headers={"Authorization": f"Token {api_token}"}
+                )
+                status = status_response.json()
+                
+                if status["status"] == "succeeded":
+                    audio_url = status["output"]
+                    if isinstance(audio_url, dict) and "url" in audio_url:
+                        audio_url = audio_url["url"]
+                    audio_response = await client.get(audio_url)
+                    print(f"[Kokoro TTS] Success! {len(audio_response.content)} bytes")
+                    return audio_response.content
+                elif status["status"] == "failed":
+                    raise Exception(f"Kokoro generation failed: {status.get('error')}")
+            
+            raise Exception("Kokoro generation timed out")
     
     def _orpheus_sync_call(self, text: str) -> bytes:
         client = GradioClient("MohamedRashad/Orpheus-TTS")

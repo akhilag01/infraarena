@@ -31,3 +31,6 @@ class TTSModelName(str, Enum):
     
     # Gradio/HuggingFace models
     ORPHEUS_TTS = "orpheus-tts"
+    
+    # Kokoro
+    KOKORO_82M = "kokoro-82m"
