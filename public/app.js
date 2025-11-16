@@ -263,10 +263,6 @@ class ProgressiveAudioPlayer {
         timeLabel.className = 'time-label';
         timeLabel.textContent = '0:00';
         
-        const statusBadge = document.createElement('span');
-        statusBadge.className = 'status-badge buffering';
-        statusBadge.textContent = 'Loading';
-        statusBadge.style.marginLeft = '8px';
         
         progressBar.appendChild(bufferedBar);
         progressBar.appendChild(playedBar);
@@ -285,13 +281,11 @@ class ProgressiveAudioPlayer {
         controls.appendChild(playBtn);
         controls.appendChild(progressContainer);
         controls.appendChild(timeLabel);
-        controls.appendChild(statusBadge);
         
         this.playBtn = playBtn;
         this.bufferedBar = bufferedBar;
         this.playedBar = playedBar;
         this.timeLabel = timeLabel;
-        this.statusBadge = statusBadge;
         
         const existingControls = this.voiceCard.querySelector('.voice-controls');
         if (existingControls) {
@@ -312,11 +306,6 @@ class ProgressiveAudioPlayer {
             
             if (this.voiceCard) {
                 this.voiceCard.classList.remove('loading');
-            }
-            
-            if (this.statusBadge && chunkId === 0) {
-                this.statusBadge.textContent = 'Buffering';
-                this.statusBadge.className = 'status-badge buffering';
             }
             
             if (chunkId === this.nextChunkId && this.sourceBuffer) {
@@ -396,11 +385,6 @@ class ProgressiveAudioPlayer {
     
     complete() {
         this.isStreamComplete = true;
-        
-        if (this.statusBadge) {
-            this.statusBadge.textContent = 'Ready';
-            this.statusBadge.className = 'status-badge ready';
-        }
         
         const totalTime = Date.now() - this.startTime;
         console.log(`[Player ${this.label}] Stream complete in ${totalTime}ms, ${this.totalChunks} chunks`);
