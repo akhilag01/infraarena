@@ -10,7 +10,19 @@ let selectedModelB = null;
 let selectedModelSingle = null;
 let availableModels = [];
 let websocket = null;
-let audioPlayers = {}; // Store audio players for each audio_id
+let audioPlayers = {};
+
+function showToast(message, duration = 3000) {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
 
 const chatScreen = document.getElementById('chat-screen');
 const leaderboardScreen = document.getElementById('leaderboard-screen');
@@ -173,15 +185,16 @@ class ProgressiveAudioPlayer {
         this.audioElement = new Audio();
         this.mediaSource = new MediaSource();
         this.sourceBuffer = null;
-        this.chunks = {}; // Map of chunkId -> bytes
+        this.chunks = {};
         this.queue = [];
         this.isAppending = false;
         this.isStreamComplete = false;
         this.nextChunkId = 0;
         this.totalChunks = 0;
         this.isUserPaused = false;
+        this.startTime = Date.now();
         
-        // Setup MediaSource for progressive loading
+        this.audioElement.preload = 'auto';
         this.audioElement.src = URL.createObjectURL(this.mediaSource);
         
         this.mediaSource.addEventListener('sourceopen', () => {
@@ -223,65 +236,63 @@ class ProgressiveAudioPlayer {
     setupUI() {
         if (!this.voiceCard) return;
         
-        // Create play button
+        this.voiceCard.classList.add('loading');
+        
         const playBtn = document.createElement('button');
         playBtn.className = 'play-btn';
-        playBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2l10 6-10 6V2z"/></svg>';
+        playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2l10 6-10 6V2z"/></svg>';
         playBtn.onclick = () => this.togglePlay();
+        playBtn.title = 'Play audio';
         
-        // Create progress bar container
         const progressContainer = document.createElement('div');
         progressContainer.className = 'progress-container';
-        progressContainer.style.cssText = 'flex: 1; margin: 0 12px; cursor: pointer; position: relative;';
+        progressContainer.style.cssText = 'flex: 1; margin: 0 10px; cursor: pointer; position: relative;';
         
-        // Background bar (total)
         const progressBar = document.createElement('div');
         progressBar.className = 'progress-bar';
-        progressBar.style.cssText = 'height: 4px; background: #e0e0e0; border-radius: 2px; position: relative; overflow: hidden;';
         
-        // Buffered bar (downloaded chunks - light blue)
         const bufferedBar = document.createElement('div');
-        bufferedBar.className = 'buffered-progress';
-        bufferedBar.style.cssText = 'position: absolute; height: 100%; background: #b3d9ff; width: 0%; transition: width 0.2s;';
+        bufferedBar.className = 'buffered';
+        bufferedBar.style.width = '0%';
         
-        // Played bar (current playback - dark blue)
         const playedBar = document.createElement('div');
-        playedBar.className = 'played-progress';
-        playedBar.style.cssText = 'position: absolute; height: 100%; background: #1a73e8; width: 0%; transition: width 0.1s;';
+        playedBar.className = 'played';
+        playedBar.style.width = '0%';
         
-        // Time display
         const timeLabel = document.createElement('span');
         timeLabel.className = 'time-label';
         timeLabel.textContent = '0:00';
-        timeLabel.style.cssText = 'font-size: 12px; color: #666; min-width: 35px;';
+        
+        const statusBadge = document.createElement('span');
+        statusBadge.className = 'status-badge buffering';
+        statusBadge.textContent = 'Loading';
+        statusBadge.style.marginLeft = '8px';
         
         progressBar.appendChild(bufferedBar);
         progressBar.appendChild(playedBar);
         progressContainer.appendChild(progressBar);
         
-        // Click to seek
         progressContainer.onclick = (e) => {
+            if (!this.audioElement.duration) return;
             const rect = progressBar.getBoundingClientRect();
-            const percent = (e.clientX - rect.left) / rect.width;
+            const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
             this.audioElement.currentTime = percent * this.audioElement.duration;
         };
         
-        // Create controls container
         const controls = document.createElement('div');
         controls.className = 'voice-controls';
-        controls.style.cssText = 'display: flex; align-items: center; margin-top: 8px;';
         
         controls.appendChild(playBtn);
         controls.appendChild(progressContainer);
         controls.appendChild(timeLabel);
+        controls.appendChild(statusBadge);
         
-        // Store references
         this.playBtn = playBtn;
         this.bufferedBar = bufferedBar;
         this.playedBar = playedBar;
         this.timeLabel = timeLabel;
+        this.statusBadge = statusBadge;
         
-        // Add to voice card
         const existingControls = this.voiceCard.querySelector('.voice-controls');
         if (existingControls) {
             existingControls.replaceWith(controls);
@@ -292,16 +303,22 @@ class ProgressiveAudioPlayer {
     
     addChunk(chunkId, hexData) {
         try {
-            // Store chunk
             const bytes = new Uint8Array(hexData.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
             this.chunks[chunkId] = bytes;
-            
-            // Update total chunks estimate
             this.totalChunks = Math.max(this.totalChunks, chunkId + 1);
             
-            console.log(`[Player ${this.label}] Stored chunk ${chunkId}, total chunks: ${this.totalChunks}, sourceBuffer ready: ${!!this.sourceBuffer}`);
+            const latency = Date.now() - this.startTime;
+            console.log(`[Player ${this.label}] Chunk ${chunkId} received (${latency}ms), ${bytes.length} bytes`);
             
-            // Try to append if it's the next expected chunk AND sourceBuffer is ready
+            if (this.voiceCard) {
+                this.voiceCard.classList.remove('loading');
+            }
+            
+            if (this.statusBadge && chunkId === 0) {
+                this.statusBadge.textContent = 'Buffering';
+                this.statusBadge.className = 'status-badge buffering';
+            }
+            
             if (chunkId === this.nextChunkId && this.sourceBuffer) {
                 this.appendNextChunks();
             }
@@ -361,9 +378,9 @@ class ProgressiveAudioPlayer {
     updatePlayButtonUI(isPlaying) {
         if (!this.playBtn) return;
         if (isPlaying) {
-            this.playBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2h3v12H4V2zm5 0h3v12H9V2z"/></svg>';
+            this.playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2h3v12H4V2zm5 0h3v12H9V2z"/></svg>';
         } else {
-            this.playBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2l10 6-10 6V2z"/></svg>';
+            this.playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2l10 6-10 6V2z"/></svg>';
         }
     }
     
@@ -379,7 +396,15 @@ class ProgressiveAudioPlayer {
     
     complete() {
         this.isStreamComplete = true;
-        // End MediaSource when all chunks are appended
+        
+        if (this.statusBadge) {
+            this.statusBadge.textContent = 'Ready';
+            this.statusBadge.className = 'status-badge ready';
+        }
+        
+        const totalTime = Date.now() - this.startTime;
+        console.log(`[Player ${this.label}] Stream complete in ${totalTime}ms, ${this.totalChunks} chunks`);
+        
         if (this.queue.length === 0 && !this.isAppending && this.mediaSource.readyState === 'open') {
             setTimeout(() => {
                 if (this.mediaSource.readyState === 'open') {
@@ -389,7 +414,7 @@ class ProgressiveAudioPlayer {
                         console.error('Error ending stream:', e);
                     }
                 }
-            }, 500);
+            }, 100);
         }
     }
     
@@ -913,6 +938,7 @@ async function sendMessageRealtime(message) {
         let modelA = null;
         let modelB = null;
         let buffer = '';
+        let streamStartTime = Date.now();
         
         while (true) {
             const { done, value } = await reader.read();
@@ -935,31 +961,41 @@ async function sendMessageRealtime(message) {
                         if (!messageDiv) {
                             placeholder.remove();
                             messageDiv = addMessage(textContent, false);
+                            const indicator = document.createElement('span');
+                            indicator.className = 'streaming-indicator';
+                            indicator.innerHTML = '<span></span><span></span><span></span>';
+                            const textDiv = messageDiv.querySelector('.message-text');
+                            if (textDiv) textDiv.appendChild(indicator);
                         } else {
                             const textDiv = messageDiv.querySelector('.message-text');
                             if (textDiv) {
+                                const indicator = textDiv.querySelector('.streaming-indicator');
                                 textDiv.textContent = textContent;
+                                if (indicator) textDiv.appendChild(indicator);
                             }
                         }
                         chatMessages.scrollTop = chatMessages.scrollHeight;
                         
                     } else if (data.type === 'text') {
                         textContent = data.content;
-                        if (!messageDiv) {
+                        if (messageDiv) {
+                            const textDiv = messageDiv.querySelector('.message-text');
+                            if (textDiv) textDiv.textContent = textContent;
+                        } else {
                             placeholder.remove();
                             messageDiv = addMessage(textContent, false);
                         }
                         chatMessages.scrollTop = chatMessages.scrollHeight;
+                        console.log(`Text complete in ${Date.now() - streamStartTime}ms`);
                         
                     } else if (data.type === 'model_info') {
                         modelA = data.model_a;
                         modelB = data.model_b;
                         console.log('Received model_info:', modelA, modelB);
                         
-                        // Create messageDiv if it doesn't exist yet
                         if (!messageDiv) {
                             placeholder.remove();
-                            messageDiv = addMessage('', false); // Empty message for now
+                            messageDiv = addMessage('', false);
                         }
                         
                         // Create voice cards immediately when we know the models
@@ -1186,6 +1222,7 @@ async function submitVote(winner) {
         const data = await response.json();
         
         hideVotePrompt();
+        showToast('Vote recorded');
         
         if (winner === 'A') {
             currentVoiceCards.voiceA.classList.add('winner');
@@ -1204,7 +1241,7 @@ async function submitVote(winner) {
         showModelReveal(data.model_a_name, data.model_a_provider, data.model_b_name, data.model_b_provider);
     } catch (error) {
         console.error('Error submitting vote:', error);
-        alert('Failed to submit vote. Please try again.');
+        showToast('Failed to submit vote');
     }
 }
 
