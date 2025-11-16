@@ -641,17 +641,15 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                     text, chunk_id = item
                     print(f"[TTS Worker {audio_label}] Processing chunk {chunk_id}: {text[:50]}...")
                     try:
-                        # Generate TTS audio with timeout
                         print(f"[TTS Worker {audio_label}] Calling generate_speech for {model_name}...")
                         audio_bytes = await asyncio.wait_for(
                             tts_service.generate_speech(text, model_name),
-                            timeout=60.0  # 60 second timeout per sentence (increased for ElevenLabs)
+                            timeout=60.0
                         )
                         
                         if audio_bytes and len(audio_bytes) > 0:
                             print(f"[TTS Worker {audio_label}] Generated {len(audio_bytes)} bytes for chunk {chunk_id}")
                             
-                            # Stream audio chunk immediately to client
                             await output_queue.put({
                                 "type": "audio_chunk",
                                 "label": audio_label,
@@ -665,13 +663,24 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                         
                     except asyncio.TimeoutError:
                         print(f"[TTS Worker {audio_label}] TIMEOUT for chunk {chunk_id} (model: {model_name})")
+                        await output_queue.put({
+                            "type": "tts_error",
+                            "label": audio_label,
+                            "error": f"Timeout generating audio for {model_name}"
+                        })
                     except asyncio.CancelledError:
                         print(f"[TTS Worker {audio_label}] CANCELLED")
                         break
                     except Exception as e:
-                        print(f"[TTS Worker {audio_label}] ERROR for chunk {chunk_id} (model: {model_name}): {type(e).__name__}: {e}")
+                        error_msg = f"{type(e).__name__}: {str(e)}"
+                        print(f"[TTS Worker {audio_label}] ERROR for chunk {chunk_id} (model: {model_name}): {error_msg}")
                         import traceback
                         traceback.print_exc()
+                        await output_queue.put({
+                            "type": "tts_error",
+                            "label": audio_label,
+                            "error": error_msg
+                        })
                     finally:
                         sentence_queue.task_done()
                 

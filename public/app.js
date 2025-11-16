@@ -1024,8 +1024,11 @@ async function sendMessageRealtime(message) {
                             }
                         }
                         
+                    } else if (data.type === 'tts_error') {
+                        console.error(`TTS ERROR for ${data.label}: ${data.error}`);
+                        alert(`TTS Error (${data.label}): ${data.error}`);
+                        
                     } else if (data.type === 'audio_chunk') {
-                        // Real-time audio chunk received
                         const label = data.label;
                         const chunkId = data.chunk_id;
                         const hexData = data.data;
