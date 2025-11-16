@@ -755,7 +755,10 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                     # Yield any audio chunks that are ready
                     while not output_queue.empty():
                         audio_chunk = await output_queue.get()
-                        print(f"[Main] Yielding audio chunk: label={audio_chunk['label']}, chunk_id={audio_chunk['chunk_id']}")
+                        if audio_chunk.get('type') == 'tts_error':
+                            print(f"[Main] Yielding TTS error: label={audio_chunk['label']}, error={audio_chunk['error']}")
+                        else:
+                            print(f"[Main] Yielding audio chunk: label={audio_chunk['label']}, chunk_id={audio_chunk.get('chunk_id')}")
                         yield json.dumps(audio_chunk) + "\n"
                         output_queue.task_done()
             
@@ -781,7 +784,10 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
             chunk_count = 0
             while not output_queue.empty():
                 audio_chunk = await output_queue.get()
-                print(f"[Main] Yielding final audio chunk: label={audio_chunk['label']}, chunk_id={audio_chunk['chunk_id']}")
+                if audio_chunk.get('type') == 'tts_error':
+                    print(f"[Main] Yielding final TTS error: label={audio_chunk['label']}, error={audio_chunk['error']}")
+                else:
+                    print(f"[Main] Yielding final audio chunk: label={audio_chunk['label']}, chunk_id={audio_chunk.get('chunk_id')}")
                 yield json.dumps(audio_chunk) + "\n"
                 output_queue.task_done()
                 chunk_count += 1
