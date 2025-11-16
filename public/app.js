@@ -1273,6 +1273,9 @@ function showModelReveal(modelAName, modelAProvider, modelBName, modelBProvider)
 }
 
 async function loadLeaderboard() {
+    headerModelSelectors.classList.add('hidden');
+    headerSingleModelSelector.classList.add('hidden');
+    
     try {
         const response = await fetch('/api/leaderboard');
         const data = await response.json();
@@ -1615,11 +1618,14 @@ newChatBtn.addEventListener('click', () => {
 navChat.addEventListener('click', () => {
     showScreen(chatScreen);
     updateActiveNav(navChat);
+    updateModelSelectorsVisibility();
 });
 
 navLeaderboard.addEventListener('click', () => {
     loadLeaderboard();
     updateActiveNav(navLeaderboard);
+    headerModelSelectors.classList.add('hidden');
+    headerSingleModelSelector.classList.add('hidden');
 });
 
 function updateActiveNav(activeItem) {
@@ -1900,18 +1906,22 @@ function switchMode(mode) {
     
     chatScreen.className = 'screen active mode-' + mode;
     
+    updateModelSelectorsVisibility();
+    
+    startSession();
+}
+
+function updateModelSelectorsVisibility() {
     headerModelSelectors.classList.add('hidden');
     headerSingleModelSelector.classList.add('hidden');
     
-    if (mode === 'side-by-side') {
+    if (currentMode === 'side-by-side') {
         headerModelSelectors.classList.remove('hidden');
         loadModels();
-    } else if (mode === 'direct') {
+    } else if (currentMode === 'direct') {
         headerSingleModelSelector.classList.remove('hidden');
         loadModels();
     }
-    
-    startSession();
 }
 
 function getProviderLogoPath(provider) {
