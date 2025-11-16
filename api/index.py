@@ -66,22 +66,31 @@ class TTSService:
         self.cartesia_api_key = os.getenv("CARTESIA_API_KEY")
     
     async def generate_speech(self, text: str, model_name: str) -> bytes:
+        print(f"[TTSService] generate_speech called with model: {model_name}")
+        
         # Convert string to enum if necessary
         if isinstance(model_name, str):
             try:
                 model_name = TTSModelName(model_name)
-            except ValueError:
+                print(f"[TTSService] Converted to enum: {model_name}")
+            except ValueError as e:
+                print(f"[TTSService] ERROR: Failed to convert '{model_name}' to enum: {e}")
                 raise ValueError(f"Unknown model: {model_name}")
 
         if model_name == TTSModelName.TTS_1:
+            print("[TTSService] Using OpenAI TTS")
             return await self._openai_tts(text)
         elif model_name in [TTSModelName.ELEVEN_V3, TTSModelName.ELEVEN_MULTILINGUAL_V2]:
+            print(f"[TTSService] Using ElevenLabs TTS with model: {model_name.value}")
             return await self._elevenlabs_tts(text, model_name.value)
         elif model_name == TTSModelName.AURA_2_THALIA_EN:
+            print("[TTSService] Using Deepgram TTS")
             return await self._deepgram_tts(text)
         elif model_name == TTSModelName.SONIC_3:
+            print("[TTSService] Using Cartesia TTS")
             return await self._cartesia_tts(text)
         else:
+            print(f"[TTSService] ERROR: No handler for model: {model_name}")
             raise ValueError(f"Unknown model: {model_name}")
     
     async def _openai_tts(self, text: str) -> bytes:
@@ -103,34 +112,56 @@ class TTSService:
         actual_model = "eleven_turbo_v2_5" if model == "eleven_v3" else model
         voice_id = "EXAVITQu4vr4xnSDxMaL"
         
-        print(f"[ElevenLabs] Starting TTS - model: {actual_model}, text: {len(text)} chars")
+        print(f"[ElevenLabs] Starting TTS")
+        print(f"[ElevenLabs] Model: {model} -> {actual_model}")
+        print(f"[ElevenLabs] Text ({len(text)} chars): {text[:100]}...")
+        print(f"[ElevenLabs] API Key: {api_key[:10]}...{api_key[-4:]}")
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-            headers = {
-                "xi-api-key": api_key,
-                "Content-Type": "application/json",
-                "Accept": "audio/mpeg"
-            }
-            payload = {
-                "text": text,
-                "model_id": actual_model,
-                "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.75
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
+                url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+                headers = {
+                    "xi-api-key": api_key,
+                    "Content-Type": "application/json",
+                    "Accept": "audio/mpeg"
                 }
-            }
-            
-            print(f"[ElevenLabs] POST to {url}")
-            response = await client.post(url, json=payload, headers=headers)
-            
-            if response.status_code != 200:
-                print(f"[ElevenLabs] ERROR: {response.status_code} - {response.text}")
-                raise Exception(f"ElevenLabs API error: {response.status_code}")
-            
-            audio_bytes = response.content
-            print(f"[ElevenLabs] Success: {len(audio_bytes)} bytes")
-            return audio_bytes
+                payload = {
+                    "text": text,
+                    "model_id": actual_model,
+                    "voice_settings": {
+                        "stability": 0.5,
+                        "similarity_boost": 0.75
+                    }
+                }
+                
+                print(f"[ElevenLabs] POST to {url}")
+                print(f"[ElevenLabs] Payload: {payload}")
+                
+                response = await client.post(url, json=payload, headers=headers)
+                
+                print(f"[ElevenLabs] Response status: {response.status_code}")
+                print(f"[ElevenLabs] Response headers: {dict(response.headers)}")
+                
+                if response.status_code != 200:
+                    error_text = response.text[:500] if len(response.text) > 500 else response.text
+                    print(f"[ElevenLabs] ERROR Response: {error_text}")
+                    raise Exception(f"ElevenLabs API error: {response.status_code} - {error_text}")
+                
+                audio_bytes = response.content
+                print(f"[ElevenLabs] Success! Received {len(audio_bytes)} bytes of audio")
+                return audio_bytes
+                
+        except httpx.TimeoutException as e:
+            print(f"[ElevenLabs] TIMEOUT ERROR: {e}")
+            raise
+        except httpx.RequestError as e:
+            print(f"[ElevenLabs] REQUEST ERROR: {type(e).__name__}: {e}")
+            raise
+        except Exception as e:
+            print(f"[ElevenLabs] UNEXPECTED ERROR: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     async def _deepgram_tts(self, text: str) -> bytes:
         async with httpx.AsyncClient() as client:
