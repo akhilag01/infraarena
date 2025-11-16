@@ -23,3 +23,7 @@ class TTSModelName(str, Enum):
 
     # Cartesia models
     SONIC_3 = "sonic-3"
+
+    # Replicate models
+    SUNO_BARK = "suno-bark"
+    SESAME_CSM_1B = "sesame-csm-1b"

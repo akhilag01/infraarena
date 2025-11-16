@@ -1234,7 +1234,9 @@ function getProviderLogo(provider) {
         'ElevenLabs': '<img src="/logos/ElevenLabs_logo.png" alt="ElevenLabs">',
         'OpenAI': '<img src="/logos/openai-icon.webp" alt="OpenAI">',
         'Deepgram': '<img src="/logos/Deepgram-wordmark-black.png" alt="Deepgram">',
-        'Cartesia': '<img src="/logos/cartesia-logo.svg" alt="Cartesia">'
+        'Cartesia': '<img src="/logos/cartesia-logo.svg" alt="Cartesia">',
+        'Suno': '<img src="/logos/suno-logo.png" alt="Suno">',
+        'Sesame': '<img src="/logos/sesame-logo.png" alt="Sesame">'
     };
     return logos[provider] || '';
 }
@@ -1929,7 +1931,9 @@ function getProviderLogoPath(provider) {
         'OpenAI': '/logos/openai-icon.webp',
         'ElevenLabs': '/logos/ElevenLabs_logo.png',
         'Deepgram': '/logos/Deepgram-wordmark-black.png',
-        'Cartesia': '/logos/cartesia-logo.svg'
+        'Cartesia': '/logos/cartesia-logo.svg',
+        'Suno': '/logos/suno-logo.png',
+        'Sesame': '/logos/sesame-logo.png'
     };
     return logoMap[provider] || '';
 }

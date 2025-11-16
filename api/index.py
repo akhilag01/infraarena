@@ -89,6 +89,12 @@ class TTSService:
         elif model_name == TTSModelName.SONIC_3:
             print("[TTSService] Using Cartesia TTS")
             return await self._cartesia_tts(text)
+        elif model_name == TTSModelName.SUNO_BARK:
+            print("[TTSService] Using Suno Bark TTS")
+            return await self._replicate_bark_tts(text)
+        elif model_name == TTSModelName.SESAME_CSM_1B:
+            print("[TTSService] Using Sesame CSM-1B TTS")
+            return await self._replicate_csm_tts(text)
         else:
             print(f"[TTSService] ERROR: No handler for model: {model_name}")
             raise ValueError(f"Unknown model: {model_name}")
@@ -199,6 +205,94 @@ class TTSService:
                 }
             )
             return response.content
+    
+    async def _replicate_bark_tts(self, text: str) -> bytes:
+        api_token = os.getenv("REPLICATE_API_TOKEN")
+        if not api_token:
+            raise ValueError("REPLICATE_API_TOKEN not set")
+        
+        print(f"[Suno Bark] Starting TTS for text: {text[:50]}...")
+        
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                "https://api.replicate.com/v1/predictions",
+                headers={
+                    "Authorization": f"Token {api_token}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "version": "b76242b40d67c76ab6742e987628a2a9ac019e11d56ab96c4e91ce03b79b2787",
+                    "input": {"prompt": text}
+                }
+            )
+            
+            if response.status_code != 201:
+                raise Exception(f"Replicate API error: {response.status_code}")
+            
+            prediction = response.json()
+            prediction_url = prediction["urls"]["get"]
+            
+            for _ in range(60):
+                await asyncio.sleep(2)
+                status_response = await client.get(
+                    prediction_url,
+                    headers={"Authorization": f"Token {api_token}"}
+                )
+                status = status_response.json()
+                
+                if status["status"] == "succeeded":
+                    audio_url = status["output"]
+                    audio_response = await client.get(audio_url)
+                    print(f"[Suno Bark] Success! {len(audio_response.content)} bytes")
+                    return audio_response.content
+                elif status["status"] == "failed":
+                    raise Exception(f"Bark generation failed: {status.get('error')}")
+            
+            raise Exception("Bark generation timed out")
+    
+    async def _replicate_csm_tts(self, text: str) -> bytes:
+        api_token = os.getenv("REPLICATE_API_TOKEN")
+        if not api_token:
+            raise ValueError("REPLICATE_API_TOKEN not set")
+        
+        print(f"[Sesame CSM] Starting TTS for text: {text[:50]}...")
+        
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                "https://api.replicate.com/v1/predictions",
+                headers={
+                    "Authorization": f"Token {api_token}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "version": "3e59b10a9894c54ae5f2fc0347e3a2f5c82f0574407e53a7d9f76ec7c502ad03",
+                    "input": {"text": text}
+                }
+            )
+            
+            if response.status_code != 201:
+                raise Exception(f"Replicate API error: {response.status_code}")
+            
+            prediction = response.json()
+            prediction_url = prediction["urls"]["get"]
+            
+            for _ in range(60):
+                await asyncio.sleep(2)
+                status_response = await client.get(
+                    prediction_url,
+                    headers={"Authorization": f"Token {api_token}"}
+                )
+                status = status_response.json()
+                
+                if status["status"] == "succeeded":
+                    audio_url = status["output"]
+                    audio_response = await client.get(audio_url)
+                    print(f"[Sesame CSM] Success! {len(audio_response.content)} bytes")
+                    return audio_response.content
+                elif status["status"] == "failed":
+                    raise Exception(f"CSM generation failed: {status.get('error')}")
+            
+            raise Exception("CSM generation timed out")
 
 # Initialize app
 app = FastAPI(title="Voice Arena")
