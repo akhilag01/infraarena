@@ -373,10 +373,10 @@ class TTSService:
         result = client.predict(
             text=text,
             voice="tara",
-            temperature=0.1,
-            top_p=0.1,
-            repetition_penalty=1.0,
-            max_new_tokens=50,
+            temperature=0.4,
+            top_p=0.9,
+            repetition_penalty=1.1,
+            max_new_tokens=1200,
             api_name="/generate_speech"
         )
         
@@ -384,10 +384,16 @@ class TTSService:
         if isinstance(result, tuple):
             audio_path = result[0]
         
+        print(f"[Orpheus TTS] Audio file path: {audio_path}")
+        
         with open(audio_path, 'rb') as f:
             audio_bytes = f.read()
         
         print(f"[Orpheus TTS] Success! {len(audio_bytes)} bytes")
+        
+        if len(audio_bytes) < 1000:
+            print(f"[Orpheus TTS] WARNING: Audio file is very small ({len(audio_bytes)} bytes)")
+        
         return audio_bytes
 
 # Initialize app
