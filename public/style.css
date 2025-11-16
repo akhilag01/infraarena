@@ -285,6 +285,11 @@ body {
 .sidebar-footer {
     padding: 12px 16px;
     border-top: 1px solid var(--border);
+    margin-top: auto;
+}
+
+.sidebar.collapsed .sidebar-footer {
+    padding: 12px 8px;
 }
 
 .nav-item {
@@ -713,7 +718,8 @@ header h1 {
 }
 
 .mode-direct .voices-container {
-    display: none;
+    grid-template-columns: 1fr;
+    max-width: 400px;
 }
 
 .mode-direct .vote-prompt {
@@ -1453,7 +1459,19 @@ header h1 {
 
 .sidebar.collapsed .user-profile {
     justify-content: center;
-    padding: 10px;
+    padding: 8px;
+    background: transparent;
+    border: none;
+    width: 100%;
+}
+
+.sidebar.collapsed .user-info {
+    display: none;
+}
+
+.sidebar.collapsed .user-avatar-img {
+    width: 32px;
+    height: 32px;
 }
 
 /* Modal Styles */

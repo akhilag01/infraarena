@@ -27,3 +27,4 @@ class TTSModelName(str, Enum):
     # Replicate models
     SUNO_BARK = "suno-bark"
     SESAME_CSM_1B = "sesame-csm-1b"
+    MINIMAX_SPEECH_02 = "minimax-speech-02"

@@ -89,6 +89,9 @@ class TTSService:
         elif model_name == TTSModelName.SONIC_3:
             print("[TTSService] Using Cartesia TTS")
             return await self._cartesia_tts(text)
+        elif model_name == TTSModelName.MINIMAX_SPEECH_02:
+            print("[TTSService] Using MiniMax Speech-02 TTS")
+            return await self._minimax_speech_tts(text)
         # Uncomment to enable Replicate models (requires Pro plan for 180s timeout)
         # elif model_name == TTSModelName.SUNO_BARK:
         #     print("[TTSService] Using Suno Bark TTS")
@@ -294,6 +297,57 @@ class TTSService:
                     raise Exception(f"CSM generation failed: {status.get('error')}")
             
             raise Exception("CSM generation timed out")
+    
+    async def _minimax_speech_tts(self, text: str) -> bytes:
+        api_token = os.getenv("REPLICATE_API_TOKEN")
+        if not api_token:
+            raise ValueError("REPLICATE_API_TOKEN not set")
+        
+        print(f"[MiniMax Speech-02] Starting TTS for text: {text[:50]}...")
+        
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                "https://api.replicate.com/v1/models/minimax/speech-02-turbo/predictions",
+                headers={
+                    "Authorization": f"Token {api_token}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "input": {
+                        "text": text,
+                        "emotion": "auto",
+                        "voice_id": "Deep_Voice_Man",
+                        "language_boost": "English",
+                        "english_normalization": True
+                    }
+                }
+            )
+            
+            if response.status_code != 201:
+                raise Exception(f"Replicate API error: {response.status_code} - {response.text}")
+            
+            prediction = response.json()
+            prediction_url = prediction["urls"]["get"]
+            
+            for _ in range(60):
+                await asyncio.sleep(2)
+                status_response = await client.get(
+                    prediction_url,
+                    headers={"Authorization": f"Token {api_token}"}
+                )
+                status = status_response.json()
+                
+                if status["status"] == "succeeded":
+                    audio_url = status["output"]
+                    if isinstance(audio_url, dict) and "url" in audio_url:
+                        audio_url = audio_url["url"]
+                    audio_response = await client.get(audio_url)
+                    print(f"[MiniMax Speech-02] Success! {len(audio_response.content)} bytes")
+                    return audio_response.content
+                elif status["status"] == "failed":
+                    raise Exception(f"MiniMax generation failed: {status.get('error')}")
+            
+            raise Exception("MiniMax generation timed out")
 
 # Initialize app
 app = FastAPI(title="Voice Arena")
@@ -341,7 +395,10 @@ def get_models():
     # Always fetch fresh data - no caching to ensure ELO ratings are up-to-date
     supabase = get_supabase()
     response = supabase.table('tts_models').select('*').execute()
-    return response.data
+    # Filter out disabled Replicate models (Suno Bark and Sesame CSM) due to cold start issues
+    disabled_models = ['suno-bark', 'sesame-csm-1b']
+    filtered_models = [m for m in response.data if m.get('name') not in disabled_models]
+    return filtered_models
 
 def get_tts_service():
     global _tts_service
