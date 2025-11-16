@@ -95,52 +95,42 @@ class TTSService:
         return response.content
     
     async def _elevenlabs_tts(self, text: str, model: str) -> bytes:
-        global _elevenlabs_client
-        if _elevenlabs_client is None:
-            print("[ElevenLabs] Initializing client")
-            _elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+        api_key = os.getenv("ELEVENLABS_API_KEY")
+        if not api_key:
+            print("[ElevenLabs] ERROR: ELEVENLABS_API_KEY not set!")
+            raise ValueError("ELEVENLABS_API_KEY environment variable not set")
         
-        print(f"[ElevenLabs] Starting TTS for model: {model}, text length: {len(text)}")
+        actual_model = "eleven_turbo_v2_5" if model == "eleven_v3" else model
+        voice_id = "EXAVITQu4vr4xnSDxMaL"
         
-        # Run synchronous ElevenLabs API in executor to avoid blocking
-        def generate_audio():
-            try:
-                print(f"[ElevenLabs] Calling API with voice_id=EXAVITQu4vr4xnSDxMaL, model_id={model}")
-                audio_generator = _elevenlabs_client.text_to_speech.convert(
-                    text=text,
-                    voice_id="EXAVITQu4vr4xnSDxMaL",
-                    model_id="eleven_turbo_v2_5" if model == "eleven_v3" else model,
-                    voice_settings={
-                        "stability": 0.5,
-                        "similarity_boost": 0.75,
-                        "style": 0.0,
-                        "use_speaker_boost": True
-                    }
-                )
-                
-                print("[ElevenLabs] Receiving audio chunks...")
-                audio_bytes = b""
-                chunk_count = 0
-                for chunk in audio_generator:
-                    audio_bytes += chunk
-                    chunk_count += 1
-                print(f"[ElevenLabs] Received {chunk_count} chunks, total: {len(audio_bytes)} bytes")
-                return audio_bytes
-            except Exception as e:
-                print(f"[ElevenLabs] ERROR in generate_audio: {e}")
-                import traceback
-                traceback.print_exc()
-                raise
+        print(f"[ElevenLabs] Starting TTS - model: {actual_model}, text: {len(text)} chars")
         
-        # Run in thread pool to avoid blocking event loop
-        try:
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, generate_audio)
-            print(f"[ElevenLabs] Completed successfully: {len(result)} bytes")
-            return result
-        except Exception as e:
-            print(f"[ElevenLabs] ERROR in executor: {e}")
-            raise
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+            headers = {
+                "xi-api-key": api_key,
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg"
+            }
+            payload = {
+                "text": text,
+                "model_id": actual_model,
+                "voice_settings": {
+                    "stability": 0.5,
+                    "similarity_boost": 0.75
+                }
+            }
+            
+            print(f"[ElevenLabs] POST to {url}")
+            response = await client.post(url, json=payload, headers=headers)
+            
+            if response.status_code != 200:
+                print(f"[ElevenLabs] ERROR: {response.status_code} - {response.text}")
+                raise Exception(f"ElevenLabs API error: {response.status_code}")
+            
+            audio_bytes = response.content
+            print(f"[ElevenLabs] Success: {len(audio_bytes)} bytes")
+            return audio_bytes
     
     async def _deepgram_tts(self, text: str) -> bytes:
         async with httpx.AsyncClient() as client:
@@ -621,30 +611,34 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
                     print(f"[TTS Worker {audio_label}] Processing chunk {chunk_id}: {text[:50]}...")
                     try:
                         # Generate TTS audio with timeout
+                        print(f"[TTS Worker {audio_label}] Calling generate_speech for {model_name}...")
                         audio_bytes = await asyncio.wait_for(
                             tts_service.generate_speech(text, model_name),
-                            timeout=30.0  # 30 second timeout per sentence
+                            timeout=60.0  # 60 second timeout per sentence (increased for ElevenLabs)
                         )
                         
-                        print(f"[TTS Worker {audio_label}] Generated {len(audio_bytes)} bytes for chunk {chunk_id}")
-                        
-                        # Stream audio chunk immediately to client
-                        await output_queue.put({
-                            "type": "audio_chunk",
-                            "label": audio_label,
-                            "chunk_id": chunk_id,
-                            "data": audio_bytes.hex()
-                        })
-                        
-                        print(f"[TTS Worker {audio_label}] Queued chunk {chunk_id} to output")
+                        if audio_bytes and len(audio_bytes) > 0:
+                            print(f"[TTS Worker {audio_label}] Generated {len(audio_bytes)} bytes for chunk {chunk_id}")
+                            
+                            # Stream audio chunk immediately to client
+                            await output_queue.put({
+                                "type": "audio_chunk",
+                                "label": audio_label,
+                                "chunk_id": chunk_id,
+                                "data": audio_bytes.hex()
+                            })
+                            
+                            print(f"[TTS Worker {audio_label}] Queued chunk {chunk_id} to output")
+                        else:
+                            print(f"[TTS Worker {audio_label}] WARNING: Empty audio for chunk {chunk_id}")
                         
                     except asyncio.TimeoutError:
-                        print(f"[TTS Worker {audio_label}] TIMEOUT for chunk {chunk_id}")
+                        print(f"[TTS Worker {audio_label}] TIMEOUT for chunk {chunk_id} (model: {model_name})")
                     except asyncio.CancelledError:
                         print(f"[TTS Worker {audio_label}] CANCELLED")
                         break
                     except Exception as e:
-                        print(f"[TTS Worker {audio_label}] ERROR for chunk {chunk_id}: {e}")
+                        print(f"[TTS Worker {audio_label}] ERROR for chunk {chunk_id} (model: {model_name}): {type(e).__name__}: {e}")
                         import traceback
                         traceback.print_exc()
                     finally:
