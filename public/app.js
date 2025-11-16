@@ -1926,9 +1926,11 @@ function switchMode(mode) {
         btn.classList.toggle('active', btn.dataset.mode === mode);
     });
     
+    showScreen(chatScreen);
     chatScreen.className = 'screen active mode-' + mode;
     
     updateModelSelectorsVisibility();
+    updateActiveNav(navChat);
     
     startSession();
 }
