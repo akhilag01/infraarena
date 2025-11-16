@@ -532,7 +532,7 @@ async def chat(request: ChatRequest):
         # Stream text response from OpenAI
         assistant_message = ""
         stream = openai_client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=messages,
             stream=True
         )
@@ -869,7 +869,7 @@ async def stream_chat_realtime(request: ChatRequest, authorization: Optional[str
             
             # Stream LLM tokens and extract sentences
             stream = openai_client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o-mini",
                 messages=messages,
                 stream=True
             )
@@ -1032,7 +1032,7 @@ async def websocket_chat(websocket: WebSocket):
         assistant_message = ""
         
         stream = openai_client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=messages,
             stream=True
         )
