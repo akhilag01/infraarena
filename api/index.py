@@ -1610,7 +1610,7 @@ async def voice_clone(audio: UploadFile = File(...), user_id: str = Form(default
             with open(tmp_path, 'rb') as f:
                 transcription = openai_client.audio.transcriptions.create(
                     model="whisper-1",
-                    file=f
+                    file=("recording.webm", f, "audio/webm")
                 )
             text = transcription.text
             print(f"[VoiceClone] Transcribed text: {text}")
