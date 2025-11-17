@@ -165,9 +165,21 @@ class VoiceCloneService:
                 tmp.write(audio_bytes)
                 tmp_path = tmp.name
             
+            wav_path = tmp_path.replace('.webm', '.wav')
+            
             try:
-                with open(tmp_path, 'rb') as f:
-                    files = {'file': ('recording.webm', f, 'audio/webm')}
+                import subprocess
+                result = subprocess.run(
+                    ['ffmpeg', '-y', '-i', tmp_path, '-ar', '16000', '-ac', '1', wav_path],
+                    capture_output=True,
+                    timeout=30
+                )
+                if result.returncode != 0:
+                    print(f"[MiniMax Clone] FFmpeg error: {result.stderr.decode()}")
+                    raise Exception("Failed to convert audio to WAV format")
+                
+                with open(wav_path, 'rb') as f:
+                    files = {'file': ('recording.wav', f, 'audio/wav')}
                     data = {'purpose': 'voice_clone'}
                     response = await client.post(
                         'https://api.minimax.io/v1/files/upload',
@@ -209,6 +221,8 @@ class VoiceCloneService:
                     raise Exception(f"Unexpected MiniMax response: {result}")
             finally:
                 os.unlink(tmp_path)
+                if os.path.exists(wav_path):
+                    os.unlink(wav_path)
 
 # TTS Service
 class TTSService:
