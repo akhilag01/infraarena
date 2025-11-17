@@ -173,7 +173,12 @@ class VoiceCloneService:
                         data=data
                     )
                     response.raise_for_status()
-                    file_id = response.json()['file']['file_id']
+                    upload_result = response.json()
+                    print(f"[MiniMax Clone] Upload response: {upload_result}")
+                    
+                    if 'file' not in upload_result or 'file_id' not in upload_result.get('file', {}):
+                        raise Exception(f"MiniMax upload failed: {upload_result}")
+                    file_id = upload_result['file']['file_id']
                 
                 custom_voice_id = f'clone_{uuid.uuid4().hex[:8]}'
                 clone_response = await client.post(
@@ -191,6 +196,7 @@ class VoiceCloneService:
                 )
                 clone_response.raise_for_status()
                 result = clone_response.json()
+                print(f"[MiniMax Clone] Clone response: {result}")
                 
                 if 'audio' in result and 'data' in result['audio']:
                     audio_base64 = result['audio']['data']
