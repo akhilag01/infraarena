@@ -726,6 +726,119 @@ header h1 {
     display: none !important;
 }
 
+.mode-clone .chat-messages,
+.mode-clone .input-container,
+.mode-clone .vote-prompt {
+    display: none !important;
+}
+
+.clone-interface {
+    padding: 24px;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.clone-header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.clone-header h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text);
+}
+
+.clone-header p {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+}
+
+.clone-recording {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.clone-record-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 32px 48px;
+    background: var(--surface-elevated);
+    border: 2px solid var(--border);
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text);
+}
+
+.clone-record-btn:hover {
+    border-color: var(--primary);
+    background: var(--surface);
+}
+
+.clone-record-btn.recording {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+}
+
+.clone-record-btn span {
+    font-size: 0.9375rem;
+    font-weight: 500;
+}
+
+.clone-timer {
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.clone-status {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    min-height: 20px;
+}
+
+.clone-results {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+.clone-voice-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+}
+
+.clone-voice-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.clone-voice-card audio {
+    width: 100%;
+}
+
 .model-selector {
     background: var(--surface-elevated);
     border: 1px solid var(--border);

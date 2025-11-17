@@ -11,6 +11,10 @@ let selectedModelSingle = null;
 let availableModels = [];
 let websocket = null;
 let audioPlayers = {};
+let cloneRecorder = null;
+let cloneAudioChunks = [];
+let cloneRecordingTimer = null;
+let cloneRecordingStartTime = null;
 
 function showToast(message, duration = 3000) {
     const toast = document.createElement('div');
@@ -1961,7 +1965,14 @@ function switchMode(mode) {
     updateModelSelectorsVisibility();
     updateActiveNav(navChat);
     
-    startSession();
+    const cloneInterface = document.getElementById('clone-interface');
+    if (mode === 'clone') {
+        cloneInterface.classList.remove('hidden');
+        resetCloneInterface();
+    } else {
+        cloneInterface.classList.add('hidden');
+        startSession();
+    }
 }
 
 function updateModelSelectorsVisibility() {
@@ -1974,6 +1985,212 @@ function updateModelSelectorsVisibility() {
     } else if (currentMode === 'direct') {
         headerSingleModelSelector.classList.remove('hidden');
         loadModels();
+    }
+}
+
+function resetCloneInterface() {
+    const cloneResults = document.getElementById('clone-results');
+    const cloneVotePrompt = document.getElementById('clone-vote-prompt');
+    const cloneStatus = document.getElementById('clone-status');
+    const cloneTimer = document.getElementById('clone-timer');
+    const cloneRecordBtn = document.getElementById('clone-record-btn');
+    
+    cloneResults.classList.add('hidden');
+    cloneVotePrompt.classList.add('hidden');
+    cloneStatus.textContent = '';
+    cloneTimer.classList.add('hidden');
+    cloneTimer.textContent = '0:00';
+    cloneRecordBtn.classList.remove('recording');
+    cloneRecordBtn.querySelector('span').textContent = 'Hold to Record (5-15 seconds)';
+}
+
+function initCloneRecording() {
+    const cloneRecordBtn = document.getElementById('clone-record-btn');
+    const cloneTimer = document.getElementById('clone-timer');
+    const cloneStatus = document.getElementById('clone-status');
+    
+    cloneRecordBtn.addEventListener('mousedown', async (e) => {
+        e.preventDefault();
+        await startCloneRecording();
+    });
+    
+    cloneRecordBtn.addEventListener('mouseup', () => {
+        stopCloneRecording();
+    });
+    
+    cloneRecordBtn.addEventListener('mouseleave', () => {
+        if (cloneRecorder && cloneRecorder.state === 'recording') {
+            stopCloneRecording();
+        }
+    });
+    
+    cloneRecordBtn.addEventListener('touchstart', async (e) => {
+        e.preventDefault();
+        await startCloneRecording();
+    });
+    
+    cloneRecordBtn.addEventListener('touchend', () => {
+        stopCloneRecording();
+    });
+}
+
+async function startCloneRecording() {
+    const cloneRecordBtn = document.getElementById('clone-record-btn');
+    const cloneTimer = document.getElementById('clone-timer');
+    const cloneStatus = document.getElementById('clone-status');
+    
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        cloneRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        cloneAudioChunks = [];
+        
+        cloneRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) {
+                cloneAudioChunks.push(e.data);
+            }
+        };
+        
+        cloneRecorder.onstop = async () => {
+            stream.getTracks().forEach(track => track.stop());
+            clearInterval(cloneRecordingTimer);
+            
+            const duration = (Date.now() - cloneRecordingStartTime) / 1000;
+            if (duration < 5) {
+                cloneStatus.textContent = 'Recording too short. Please record at least 5 seconds.';
+                resetCloneInterface();
+                return;
+            }
+            
+            const audioBlob = new Blob(cloneAudioChunks, { type: 'audio/webm' });
+            cloneStatus.textContent = 'Processing voice sample...';
+            await submitCloneAudio(audioBlob);
+        };
+        
+        cloneRecorder.start(100);
+        cloneRecordingStartTime = Date.now();
+        cloneRecordBtn.classList.add('recording');
+        cloneRecordBtn.querySelector('span').textContent = 'Recording...';
+        cloneTimer.classList.remove('hidden');
+        cloneStatus.textContent = '';
+        
+        cloneRecordingTimer = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - cloneRecordingStartTime) / 1000);
+            const mins = Math.floor(elapsed / 60);
+            const secs = elapsed % 60;
+            cloneTimer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+            
+            if (elapsed >= 15) {
+                stopCloneRecording();
+            }
+        }, 100);
+        
+    } catch (err) {
+        console.error('Error accessing microphone:', err);
+        cloneStatus.textContent = 'Error accessing microphone. Please allow microphone access.';
+    }
+}
+
+function stopCloneRecording() {
+    const cloneRecordBtn = document.getElementById('clone-record-btn');
+    
+    if (cloneRecorder && cloneRecorder.state === 'recording') {
+        cloneRecorder.stop();
+        cloneRecordBtn.classList.remove('recording');
+        cloneRecordBtn.querySelector('span').textContent = 'Hold to Record (5-15 seconds)';
+    }
+}
+
+async function submitCloneAudio(audioBlob) {
+    const cloneStatus = document.getElementById('clone-status');
+    const cloneResults = document.getElementById('clone-results');
+    const cloneVotePrompt = document.getElementById('clone-vote-prompt');
+    const cloneAudioA = document.getElementById('clone-audio-a');
+    const cloneAudioB = document.getElementById('clone-audio-b');
+    
+    try {
+        cloneStatus.textContent = 'Cloning your voice with two different AI models...';
+        
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.webm');
+        if (authToken) {
+            formData.append('user_id', currentUser?.id || '');
+        }
+        
+        const response = await fetch(`${API_BASE}/api/voice-clone`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Clone failed');
+        }
+        
+        const result = await response.json();
+        
+        cloneAudioA.src = `data:audio/mp3;base64,${result.audio_a}`;
+        cloneAudioB.src = `data:audio/mp3;base64,${result.audio_b}`;
+        
+        window.currentCloneSession = {
+            model_a_id: result.model_a_id,
+            model_b_id: result.model_b_id,
+            clone_session_id: result.clone_session_id
+        };
+        
+        cloneStatus.textContent = 'Listen to both clones and vote for which sounds more like you!';
+        cloneResults.classList.remove('hidden');
+        cloneVotePrompt.classList.remove('hidden');
+        
+    } catch (err) {
+        console.error('Clone error:', err);
+        cloneStatus.textContent = `Error: ${err.message}`;
+    }
+}
+
+function initCloneVoting() {
+    document.querySelectorAll('[data-clone-vote]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const vote = btn.dataset.cloneVote;
+            await submitCloneVote(vote);
+        });
+    });
+}
+
+async function submitCloneVote(vote) {
+    const cloneStatus = document.getElementById('clone-status');
+    const cloneVotePrompt = document.getElementById('clone-vote-prompt');
+    
+    if (!window.currentCloneSession) {
+        cloneStatus.textContent = 'Error: No clone session found';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/voice-clone/vote`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                clone_session_id: window.currentCloneSession.clone_session_id,
+                vote: vote,
+                model_a_id: window.currentCloneSession.model_a_id,
+                model_b_id: window.currentCloneSession.model_b_id
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Vote submission failed');
+        }
+        
+        const result = await response.json();
+        
+        cloneVotePrompt.classList.add('hidden');
+        cloneStatus.textContent = `Vote recorded! Model A: ${result.model_a_name}, Model B: ${result.model_b_name}. Click "Voice Clone" again to try another comparison.`;
+        
+        showToast('Vote recorded!');
+        
+    } catch (err) {
+        console.error('Vote error:', err);
+        cloneStatus.textContent = `Error submitting vote: ${err.message}`;
     }
 }
 
@@ -2130,6 +2347,9 @@ initCustomSelect(headerModelSelectSingle, (modelId) => {
     selectedModelSingle = modelId;
     startSession();
 });
+
+initCloneRecording();
+initCloneVoting();
 
 // Initialize with battle mode
 switchMode('battle');

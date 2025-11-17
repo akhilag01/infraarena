@@ -6,15 +6,21 @@ import httpx
 import asyncio
 import json
 from typing import Optional
-from fastapi import FastAPI, HTTPException, UploadFile, File, Header, WebSocket, WebSocketDisconnect
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, UploadFile, File, Header, WebSocket, WebSocketDisconnect, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from openai import OpenAI
 from elevenlabs import ElevenLabs
 from supabase import create_client, Client
 from gradio_client import Client as GradioClient
 from arena.types import TTSModelName
+import base64
+import tempfile
+
+load_dotenv()
 
 # Initialize clients lazily
 _supabase_client = None
@@ -59,6 +65,140 @@ def calculate_elo_both_bad(rating_a: float, rating_b: float, k_factor: int = 32)
     new_rating_a = rating_a + k_factor * (0 - expected_a)
     new_rating_b = rating_b + k_factor * (0 - expected_b)
     return new_rating_a, new_rating_b
+
+class VoiceCloneService:
+    def __init__(self):
+        self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+        self.cartesia_api_key = os.getenv("CARTESIA_API_KEY")
+        self.minimax_api_key = os.getenv("REPLICATE_API_TOKEN")
+    
+    async def clone_voice_elevenlabs(self, audio_bytes: bytes, text: str) -> bytes:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as tmp:
+                tmp.write(audio_bytes)
+                tmp_path = tmp.name
+            
+            try:
+                with open(tmp_path, 'rb') as f:
+                    files = {'files': ('recording.webm', f, 'audio/webm')}
+                    data = {'name': f'clone_{uuid.uuid4().hex[:8]}', 'remove_background_noise': 'true'}
+                    response = await client.post(
+                        'https://api.elevenlabs.io/v1/voices/add',
+                        headers={'xi-api-key': self.elevenlabs_api_key},
+                        files=files,
+                        data=data
+                    )
+                    response.raise_for_status()
+                    voice_id = response.json()['voice_id']
+                
+                tts_response = await client.post(
+                    f'https://api.elevenlabs.io/v1/text-to-speech/{voice_id}',
+                    headers={
+                        'xi-api-key': self.elevenlabs_api_key,
+                        'Content-Type': 'application/json'
+                    },
+                    json={
+                        'text': text,
+                        'model_id': 'eleven_multilingual_v2',
+                        'voice_settings': {'stability': 0.5, 'similarity_boost': 0.75}
+                    }
+                )
+                tts_response.raise_for_status()
+                audio_data = tts_response.content
+                
+                await client.delete(
+                    f'https://api.elevenlabs.io/v1/voices/{voice_id}',
+                    headers={'xi-api-key': self.elevenlabs_api_key}
+                )
+                
+                return audio_data
+            finally:
+                os.unlink(tmp_path)
+    
+    async def clone_voice_cartesia(self, audio_bytes: bytes, text: str) -> bytes:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as tmp:
+                tmp.write(audio_bytes)
+                tmp_path = tmp.name
+            
+            try:
+                with open(tmp_path, 'rb') as f:
+                    files = {'clip': ('recording.webm', f, 'audio/webm')}
+                    data = {'name': f'clone_{uuid.uuid4().hex[:8]}', 'language': 'en'}
+                    response = await client.post(
+                        'https://api.cartesia.ai/voices/clone',
+                        headers={
+                            'Authorization': f'Bearer {self.cartesia_api_key}',
+                            'Cartesia-Version': '2025-04-16'
+                        },
+                        files=files,
+                        data=data
+                    )
+                    response.raise_for_status()
+                    voice_id = response.json()['id']
+                
+                tts_response = await client.post(
+                    'https://api.cartesia.ai/tts/bytes',
+                    headers={
+                        'Authorization': f'Bearer {self.cartesia_api_key}',
+                        'Cartesia-Version': '2025-04-16',
+                        'Content-Type': 'application/json'
+                    },
+                    json={
+                        'transcript': text,
+                        'model_id': 'sonic-2',
+                        'voice': {'mode': 'id', 'id': voice_id},
+                        'output_format': {'container': 'mp3', 'bit_rate': 128000, 'sample_rate': 44100}
+                    }
+                )
+                tts_response.raise_for_status()
+                return tts_response.content
+            finally:
+                os.unlink(tmp_path)
+    
+    async def clone_voice_minimax(self, audio_bytes: bytes, text: str) -> bytes:
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as tmp:
+                tmp.write(audio_bytes)
+                tmp_path = tmp.name
+            
+            try:
+                with open(tmp_path, 'rb') as f:
+                    files = {'file': ('recording.webm', f, 'audio/webm')}
+                    data = {'purpose': 'voice_clone'}
+                    response = await client.post(
+                        'https://api.minimax.io/v1/files/upload',
+                        headers={'Authorization': f'Bearer {self.minimax_api_key}'},
+                        files=files,
+                        data=data
+                    )
+                    response.raise_for_status()
+                    file_id = response.json()['file']['file_id']
+                
+                custom_voice_id = f'clone_{uuid.uuid4().hex[:8]}'
+                clone_response = await client.post(
+                    'https://api.minimax.io/v1/voice_clone',
+                    headers={
+                        'Authorization': f'Bearer {self.minimax_api_key}',
+                        'Content-Type': 'application/json'
+                    },
+                    json={
+                        'file_id': file_id,
+                        'voice_id': custom_voice_id,
+                        'text': text,
+                        'model': 'speech-2.6-hd'
+                    }
+                )
+                clone_response.raise_for_status()
+                result = clone_response.json()
+                
+                if 'audio' in result and 'data' in result['audio']:
+                    audio_base64 = result['audio']['data']
+                    return base64.b64decode(audio_base64)
+                else:
+                    raise Exception(f"Unexpected MiniMax response: {result}")
+            finally:
+                os.unlink(tmp_path)
 
 # TTS Service
 class TTSService:
@@ -464,6 +604,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files for local development
+try:
+    import pathlib
+    static_path = pathlib.Path(__file__).parent.parent / "public"
+    if static_path.exists():
+        app.mount("/logos", StaticFiles(directory=str(static_path / "logos")), name="logos")
+        
+        @app.get("/app.js")
+        async def serve_app_js():
+            return FileResponse(str(static_path / "app.js"))
+        
+        @app.get("/style.css")
+        async def serve_style_css():
+            return FileResponse(str(static_path / "style.css"))
+        
+        @app.get("/")
+        async def serve_index():
+            return FileResponse(str(static_path / "index.html"))
+except Exception as e:
+    print(f"Static files not mounted: {e}")
 
 # No caching - always fetch fresh data from Supabase
 
@@ -1423,3 +1584,128 @@ async def logout(authorization: str = Header(None)):
         return {"message": "Logged out successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/voice-clone")
+async def voice_clone(audio: UploadFile = File(...), user_id: str = Form(default='')):
+    try:
+        audio_bytes = await audio.read()
+        print(f"[VoiceClone] Received {len(audio_bytes)} bytes of audio")
+        
+        openai_client = get_openai_client()
+        with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = tmp.name
+        
+        try:
+            with open(tmp_path, 'rb') as f:
+                transcription = openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=f
+                )
+            text = transcription.text
+            print(f"[VoiceClone] Transcribed text: {text}")
+        finally:
+            os.unlink(tmp_path)
+        
+        clone_providers = ['elevenlabs', 'cartesia', 'minimax']
+        selected = random.sample(clone_providers, 2)
+        print(f"[VoiceClone] Selected providers: {selected}")
+        
+        clone_service = VoiceCloneService()
+        
+        async def clone_with_provider(provider: str) -> tuple[str, bytes]:
+            if provider == 'elevenlabs':
+                return (provider, await clone_service.clone_voice_elevenlabs(audio_bytes, text))
+            elif provider == 'cartesia':
+                return (provider, await clone_service.clone_voice_cartesia(audio_bytes, text))
+            elif provider == 'minimax':
+                return (provider, await clone_service.clone_voice_minimax(audio_bytes, text))
+        
+        results = await asyncio.gather(
+            clone_with_provider(selected[0]),
+            clone_with_provider(selected[1])
+        )
+        
+        clone_session_id = str(uuid.uuid4())
+        
+        provider_to_model = {
+            'elevenlabs': 'eleven_multilingual_v2',
+            'cartesia': 'sonic-3',
+            'minimax': 'minimax-speech-02'
+        }
+        
+        model_a_name = provider_to_model[results[0][0]]
+        model_b_name = provider_to_model[results[1][0]]
+        
+        supabase = get_supabase()
+        models = supabase.table('tts_models').select('id, name').execute()
+        model_map = {m['name']: m['id'] for m in models.data}
+        
+        model_a_id = model_map.get(model_a_name, model_a_name)
+        model_b_id = model_map.get(model_b_name, model_b_name)
+        
+        return {
+            'clone_session_id': clone_session_id,
+            'audio_a': base64.b64encode(results[0][1]).decode('utf-8'),
+            'audio_b': base64.b64encode(results[1][1]).decode('utf-8'),
+            'model_a_id': model_a_id,
+            'model_b_id': model_b_id,
+            'model_a_provider': results[0][0],
+            'model_b_provider': results[1][0],
+            'transcribed_text': text
+        }
+        
+    except Exception as e:
+        print(f"[VoiceClone] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+class CloneVoteRequest(BaseModel):
+    clone_session_id: str
+    vote: str
+    model_a_id: str
+    model_b_id: str
+
+@app.post("/api/voice-clone/vote")
+async def voice_clone_vote(request: CloneVoteRequest):
+    try:
+        supabase = get_supabase()
+        
+        models = supabase.table('tts_models').select('id, name, elo_rating').execute()
+        model_map = {m['id']: m for m in models.data}
+        
+        model_a = model_map.get(request.model_a_id)
+        model_b = model_map.get(request.model_b_id)
+        
+        if not model_a or not model_b:
+            raise HTTPException(status_code=400, detail="Invalid model IDs")
+        
+        rating_a = model_a['elo_rating']
+        rating_b = model_b['elo_rating']
+        
+        if request.vote == 'A':
+            new_rating_a, new_rating_b = calculate_elo(rating_a, rating_b)
+        elif request.vote == 'B':
+            new_rating_b, new_rating_a = calculate_elo(rating_b, rating_a)
+        elif request.vote == 'tie':
+            new_rating_a, new_rating_b = calculate_elo_tie(rating_a, rating_b)
+        elif request.vote == 'both_bad':
+            new_rating_a, new_rating_b = calculate_elo_both_bad(rating_a, rating_b)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid vote")
+        
+        supabase.table('tts_models').update({'elo_rating': new_rating_a}).eq('id', request.model_a_id).execute()
+        supabase.table('tts_models').update({'elo_rating': new_rating_b}).eq('id', request.model_b_id).execute()
+        
+        return {
+            'message': 'Vote recorded',
+            'model_a_name': model_a['name'],
+            'model_b_name': model_b['name'],
+            'model_a_new_rating': new_rating_a,
+            'model_b_new_rating': new_rating_b
+        }
+        
+    except Exception as e:
+        print(f"[VoiceCloneVote] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
