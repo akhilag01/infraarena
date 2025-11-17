@@ -222,6 +222,11 @@ class VoiceCloneService:
                 if 'audio' in result and 'data' in result['audio']:
                     audio_base64 = result['audio']['data']
                     return base64.b64decode(audio_base64)
+                elif 'demo_audio' in result and result['demo_audio']:
+                    audio_url = result['demo_audio']
+                    audio_response = await client.get(audio_url)
+                    audio_response.raise_for_status()
+                    return audio_response.content
                 else:
                     raise Exception(f"Unexpected MiniMax response: {result}")
             finally:
