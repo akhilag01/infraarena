@@ -1,4 +1,15 @@
 {
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60
+    }
+  },
+  "build": {
+    "env": {
+      "PYTHON_VERSION": "3.9"
+    }
+  },
+  "installCommand": "yum install -y ffmpeg || apt-get update && apt-get install -y ffmpeg || true",
   "rewrites": [
     {
       "source": "/api/(.*)",
