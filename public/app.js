@@ -2089,11 +2089,14 @@ async function startCloneRecording() {
 
 function stopCloneRecording() {
     const cloneRecordBtn = document.getElementById('clone-record-btn');
+    const cloneTimer = document.getElementById('clone-timer');
     
     if (cloneRecorder && cloneRecorder.state === 'recording') {
+        clearInterval(cloneRecordingTimer);
         cloneRecorder.stop();
         cloneRecordBtn.classList.remove('recording');
         cloneRecordBtn.querySelector('span').textContent = 'Hold to Record (5-15 seconds)';
+        cloneTimer.classList.add('hidden');
     }
 }
 
