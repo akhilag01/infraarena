@@ -844,6 +844,34 @@ header h1 {
     width: 100%;
 }
 
+.clone-regen-container {
+    margin-bottom: 24px;
+}
+
+.clone-transcribed-text {
+    text-align: center;
+}
+
+.clone-transcribed-text label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.clone-text-display {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: var(--text);
+    font-size: 0.9375rem;
+    font-style: italic;
+}
+
 .model-selector {
     background: var(--surface-elevated);
     border: 1px solid var(--border);

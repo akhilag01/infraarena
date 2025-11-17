@@ -2131,11 +2131,20 @@ async function submitCloneAudio(audioBlob) {
         window.currentCloneSession = {
             model_a_id: result.model_a_id,
             model_b_id: result.model_b_id,
+            model_a_provider: result.model_a_provider,
+            model_b_provider: result.model_b_provider,
             clone_session_id: result.clone_session_id
         };
         
+        document.getElementById('clone-label-a').textContent = 'Clone A';
+        document.getElementById('clone-label-b').textContent = 'Clone B';
+        
+        const cloneRegenContainer = document.getElementById('clone-regen-container');
+        document.getElementById('clone-text-display').textContent = result.transcribed_text || '';
+        
         cloneStatus.textContent = 'Listen to both clones and vote for which sounds more like you!';
         cloneResults.classList.remove('hidden');
+        cloneRegenContainer.classList.remove('hidden');
         cloneVotePrompt.classList.remove('hidden');
         
     } catch (err) {
@@ -2181,7 +2190,28 @@ async function submitCloneVote(vote) {
         const result = await response.json();
         
         cloneVotePrompt.classList.add('hidden');
-        cloneStatus.textContent = `Vote recorded! Model A: ${result.model_a_name}, Model B: ${result.model_b_name}. Click "Voice Clone" again to try another comparison.`;
+        
+        const labelA = document.getElementById('clone-label-a');
+        const labelB = document.getElementById('clone-label-b');
+        const providerA = window.currentCloneSession.model_a_provider;
+        const providerB = window.currentCloneSession.model_b_provider;
+        
+        const providerNameMap = {
+            'elevenlabs': 'ElevenLabs',
+            'cartesia': 'Cartesia',
+            'minimax': 'MiniMax'
+        };
+        
+        const logoPathMap = {
+            'elevenlabs': '/logos/ElevenLabs_logo.png',
+            'cartesia': '/logos/cartesia-logo.svg',
+            'minimax': '/logos/minimax-color.png'
+        };
+        
+        labelA.innerHTML = `<div class="model-reveal-inline"><div class="model-logo-small"><img src="${logoPathMap[providerA]}" alt="${providerNameMap[providerA]}"></div><span>${providerNameMap[providerA]}</span></div>`;
+        labelB.innerHTML = `<div class="model-reveal-inline"><div class="model-logo-small"><img src="${logoPathMap[providerB]}" alt="${providerNameMap[providerB]}"></div><span>${providerNameMap[providerB]}</span></div>`;
+        
+        cloneStatus.textContent = `Vote recorded! Click "Voice Clone" again to try another comparison.`;
         
         showToast('Vote recorded!');
         

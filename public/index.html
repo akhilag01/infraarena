@@ -184,13 +184,19 @@
                         <div id="clone-status" class="clone-status"></div>
                     </div>
                     <div id="clone-results" class="clone-results hidden">
-                        <div class="clone-voice-card">
-                            <div class="clone-voice-label">Clone A</div>
+                        <div class="clone-voice-card" id="clone-card-a">
+                            <div class="clone-voice-label" id="clone-label-a">Clone A</div>
                             <audio id="clone-audio-a" controls></audio>
                         </div>
-                        <div class="clone-voice-card">
-                            <div class="clone-voice-label">Clone B</div>
+                        <div class="clone-voice-card" id="clone-card-b">
+                            <div class="clone-voice-label" id="clone-label-b">Clone B</div>
                             <audio id="clone-audio-b" controls></audio>
+                        </div>
+                    </div>
+                    <div id="clone-regen-container" class="clone-regen-container hidden">
+                        <div class="clone-transcribed-text">
+                            <label>Clones are saying:</label>
+                            <div id="clone-text-display" class="clone-text-display"></div>
                         </div>
                     </div>
                     <div id="clone-vote-prompt" class="vote-prompt hidden">
