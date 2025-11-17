@@ -1624,17 +1624,34 @@ async def voice_clone(audio: UploadFile = File(...), user_id: str = Form(default
         print(f"[VoiceClone] Selected providers: {selected}")
         
         async def clone_with_provider(provider: str) -> tuple[str, bytes]:
-            if provider == 'elevenlabs':
-                return (provider, await clone_service.clone_voice_elevenlabs(audio_bytes, text))
-            elif provider == 'cartesia':
-                return (provider, await clone_service.clone_voice_cartesia(audio_bytes, text))
-            elif provider == 'minimax':
-                return (provider, await clone_service.clone_voice_minimax(audio_bytes, text))
+            try:
+                print(f"[VoiceClone] Starting clone with {provider}")
+                if provider == 'elevenlabs':
+                    result = await clone_service.clone_voice_elevenlabs(audio_bytes, text)
+                elif provider == 'cartesia':
+                    result = await clone_service.clone_voice_cartesia(audio_bytes, text)
+                elif provider == 'minimax':
+                    result = await clone_service.clone_voice_minimax(audio_bytes, text)
+                else:
+                    raise Exception(f"Unknown provider: {provider}")
+                print(f"[VoiceClone] {provider} clone completed, {len(result)} bytes")
+                return (provider, result)
+            except Exception as e:
+                print(f"[VoiceClone] {provider} clone FAILED: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
         
         results = await asyncio.gather(
             clone_with_provider(selected[0]),
-            clone_with_provider(selected[1])
+            clone_with_provider(selected[1]),
+            return_exceptions=True
         )
+        
+        errors = [r for r in results if isinstance(r, Exception)]
+        if errors:
+            error_msgs = [str(e) for e in errors]
+            raise HTTPException(status_code=500, detail=f"Clone failed: {'; '.join(error_msgs)}")
         
         clone_session_id = str(uuid.uuid4())
         
