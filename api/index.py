@@ -70,7 +70,7 @@ class VoiceCloneService:
     def __init__(self):
         self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
         self.cartesia_api_key = os.getenv("CARTESIA_API_KEY")
-        self.minimax_api_key = os.getenv("REPLICATE_API_TOKEN")
+        self.minimax_api_key = os.getenv("MINIMAX_API_KEY")
     
     async def clone_voice_elevenlabs(self, audio_bytes: bytes, text: str) -> bytes:
         async with httpx.AsyncClient(timeout=120.0) as client:
@@ -1607,11 +1607,21 @@ async def voice_clone(audio: UploadFile = File(...), user_id: str = Form(default
         finally:
             os.unlink(tmp_path)
         
-        clone_providers = ['elevenlabs', 'cartesia', 'minimax']
+        clone_service = VoiceCloneService()
+        
+        clone_providers = []
+        if clone_service.elevenlabs_api_key:
+            clone_providers.append('elevenlabs')
+        if clone_service.cartesia_api_key:
+            clone_providers.append('cartesia')
+        if clone_service.minimax_api_key:
+            clone_providers.append('minimax')
+        
+        if len(clone_providers) < 2:
+            raise HTTPException(status_code=500, detail=f"Need at least 2 clone providers configured. Available: {clone_providers}")
+        
         selected = random.sample(clone_providers, 2)
         print(f"[VoiceClone] Selected providers: {selected}")
-        
-        clone_service = VoiceCloneService()
         
         async def clone_with_provider(provider: str) -> tuple[str, bytes]:
             if provider == 'elevenlabs':

@@ -1965,12 +1965,9 @@ function switchMode(mode) {
     updateModelSelectorsVisibility();
     updateActiveNav(navChat);
     
-    const cloneInterface = document.getElementById('clone-interface');
     if (mode === 'clone') {
-        cloneInterface.classList.remove('hidden');
         resetCloneInterface();
     } else {
-        cloneInterface.classList.add('hidden');
         startSession();
     }
 }
