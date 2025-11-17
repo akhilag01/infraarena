@@ -2160,6 +2160,66 @@ function initCloneVoting() {
             await submitCloneVote(vote);
         });
     });
+    
+    const cloneRegenBtn = document.getElementById('clone-regen-btn');
+    if (cloneRegenBtn) {
+        cloneRegenBtn.addEventListener('click', async () => {
+            const customText = document.getElementById('clone-text-input').value.trim();
+            if (!customText) {
+                showToast('Please enter text for the clones to say');
+                return;
+            }
+            await regenerateCloneAudio(customText);
+        });
+    }
+}
+
+async function regenerateCloneAudio(text) {
+    const cloneStatus = document.getElementById('clone-status');
+    const cloneAudioA = document.getElementById('clone-audio-a');
+    const cloneAudioB = document.getElementById('clone-audio-b');
+    const cloneRegenBtn = document.getElementById('clone-regen-btn');
+    
+    if (!window.currentCloneSession) {
+        cloneStatus.textContent = 'Error: No clone session found';
+        return;
+    }
+    
+    try {
+        cloneRegenBtn.disabled = true;
+        cloneRegenBtn.textContent = 'Generating...';
+        cloneStatus.textContent = 'Generating audio with new text...';
+        
+        const response = await fetch('/api/voice-clone/regenerate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                text: text,
+                model_a_provider: window.currentCloneSession.model_a_provider,
+                model_b_provider: window.currentCloneSession.model_b_provider,
+                clone_session_id: window.currentCloneSession.clone_session_id
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || error.message || 'Regeneration failed');
+        }
+        
+        const result = await response.json();
+        
+        cloneAudioA.src = `data:audio/mp3;base64,${result.audio_a}`;
+        cloneAudioB.src = `data:audio/mp3;base64,${result.audio_b}`;
+        
+        cloneStatus.textContent = 'Audio regenerated! Listen and vote.';
+        
+    } catch (err) {
+        console.error('Regenerate error:', err);
+        cloneStatus.textContent = `Error: ${err.message}`;
+    } finally {
+        cloneRegenBtn.disabled = false;
+        cloneRegenBtn.textContent = 'Generate';
+    }
 }
 
 async function submitCloneVote(vote) {

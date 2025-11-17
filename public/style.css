@@ -862,14 +862,30 @@ header h1 {
     letter-spacing: 0.05em;
 }
 
-.clone-text-display {
+.clone-text-input-wrapper {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.clone-text-input-wrapper input {
+    flex: 1;
+    padding: 12px 16px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 12px 16px;
     color: var(--text);
     font-size: 0.9375rem;
-    font-style: italic;
+}
+
+.clone-text-input-wrapper input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.clone-text-input-wrapper .primary-btn {
+    padding: 12px 24px;
+    white-space: nowrap;
 }
 
 .model-selector {

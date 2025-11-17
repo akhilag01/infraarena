@@ -28,6 +28,9 @@ _openai_client = None
 _elevenlabs_client = None
 _tts_service = None
 
+# Cache for clone sessions (store audio samples for regeneration)
+_clone_session_cache = {}
+
 def get_supabase() -> Client:
     global _supabase_client
     if _supabase_client is None:
@@ -1616,12 +1619,14 @@ async def voice_clone(audio: UploadFile = File(...), user_id: str = Form(default
         clone_service = VoiceCloneService()
         
         clone_providers = []
-        if clone_service.elevenlabs_api_key:
+        if clone_service.elevenlabs_api_key and len(clone_service.elevenlabs_api_key) > 0:
             clone_providers.append('elevenlabs')
-        if clone_service.cartesia_api_key:
+        if clone_service.cartesia_api_key and len(clone_service.cartesia_api_key) > 0:
             clone_providers.append('cartesia')
-        if clone_service.minimax_api_key:
+        if clone_service.minimax_api_key and len(clone_service.minimax_api_key) > 0:
             clone_providers.append('minimax')
+        
+        print(f"[VoiceClone] Available providers: {clone_providers}")
         
         if len(clone_providers) < 2:
             raise HTTPException(status_code=500, detail=f"Need at least 2 clone providers configured. Available: {clone_providers}")
@@ -1660,6 +1665,11 @@ async def voice_clone(audio: UploadFile = File(...), user_id: str = Form(default
             raise HTTPException(status_code=500, detail=f"Clone failed: {'; '.join(error_msgs)}")
         
         clone_session_id = str(uuid.uuid4())
+        
+        _clone_session_cache[clone_session_id] = {
+            'audio_bytes': audio_bytes,
+            'providers': [results[0][0], results[1][0]]
+        }
         
         provider_to_model = {
             'elevenlabs': 'eleven_multilingual_v2',
@@ -1741,4 +1751,53 @@ async def voice_clone_vote(request: CloneVoteRequest):
         
     except Exception as e:
         print(f"[VoiceCloneVote] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class CloneRegenerateRequest(BaseModel):
+    text: str
+    model_a_provider: str
+    model_b_provider: str
+    clone_session_id: Optional[str] = None
+
+@app.post("/api/voice-clone/regenerate")
+async def voice_clone_regenerate(request: CloneRegenerateRequest):
+    try:
+        if not request.clone_session_id or request.clone_session_id not in _clone_session_cache:
+            raise HTTPException(status_code=400, detail="Clone session not found. Please record a new voice sample.")
+        
+        session_data = _clone_session_cache[request.clone_session_id]
+        audio_bytes = session_data['audio_bytes']
+        
+        clone_service = VoiceCloneService()
+        
+        async def clone_with_provider(provider: str, text: str) -> bytes:
+            if provider == 'elevenlabs':
+                return await clone_service.clone_voice_elevenlabs(audio_bytes, text)
+            elif provider == 'cartesia':
+                return await clone_service.clone_voice_cartesia(audio_bytes, text)
+            elif provider == 'minimax':
+                return await clone_service.clone_voice_minimax(audio_bytes, text)
+            else:
+                raise Exception(f"Unknown provider: {provider}")
+        
+        results = await asyncio.gather(
+            clone_with_provider(request.model_a_provider, request.text),
+            clone_with_provider(request.model_b_provider, request.text),
+            return_exceptions=True
+        )
+        
+        errors = [r for r in results if isinstance(r, Exception)]
+        if errors:
+            error_msgs = [str(e) for e in errors]
+            raise HTTPException(status_code=500, detail=f"Regeneration failed: {'; '.join(error_msgs)}")
+        
+        return {
+            'audio_a': base64.b64encode(results[0]).decode('utf-8'),
+            'audio_b': base64.b64encode(results[1]).decode('utf-8')
+        }
+        
+    except Exception as e:
+        print(f"[VoiceCloneRegenerate] Error: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
