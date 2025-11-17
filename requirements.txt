@@ -10,3 +10,4 @@ python-multipart
 supabase
 gotrue
 gradio_client
+pydub

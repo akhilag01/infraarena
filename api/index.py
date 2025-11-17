@@ -168,15 +168,10 @@ class VoiceCloneService:
             wav_path = tmp_path.replace('.webm', '.wav')
             
             try:
-                import subprocess
-                result = subprocess.run(
-                    ['ffmpeg', '-y', '-i', tmp_path, '-ar', '16000', '-ac', '1', wav_path],
-                    capture_output=True,
-                    timeout=30
-                )
-                if result.returncode != 0:
-                    print(f"[MiniMax Clone] FFmpeg error: {result.stderr.decode()}")
-                    raise Exception("Failed to convert audio to WAV format")
+                from pydub import AudioSegment
+                audio = AudioSegment.from_file(tmp_path, format="webm")
+                audio = audio.set_frame_rate(16000).set_channels(1)
+                audio.export(wav_path, format="wav")
                 
                 with open(wav_path, 'rb') as f:
                     files = {'file': ('recording.wav', f, 'audio/wav')}
