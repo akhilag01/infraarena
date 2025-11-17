@@ -728,8 +728,12 @@ header h1 {
 
 .mode-clone .chat-messages,
 .mode-clone .input-container,
-.mode-clone .vote-prompt {
+.mode-clone > .vote-prompt {
     display: none !important;
+}
+
+.mode-clone #clone-vote-prompt {
+    display: block;
 }
 
 .clone-interface {
