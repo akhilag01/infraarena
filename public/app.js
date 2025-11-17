@@ -2140,7 +2140,7 @@ async function submitCloneAudio(audioBlob) {
         document.getElementById('clone-label-b').textContent = 'Clone B';
         
         const cloneRegenContainer = document.getElementById('clone-regen-container');
-        document.getElementById('clone-text-display').textContent = result.transcribed_text || '';
+        document.getElementById('clone-text-input').value = result.transcribed_text || '';
         
         cloneStatus.textContent = 'Listen to both clones and vote for which sounds more like you!';
         cloneResults.classList.remove('hidden');
