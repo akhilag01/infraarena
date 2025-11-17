@@ -733,9 +733,14 @@ header h1 {
 }
 
 .clone-interface {
+    display: none;
     padding: 24px;
     max-width: 800px;
     margin: 0 auto;
+}
+
+.mode-clone .clone-interface {
+    display: block;
 }
 
 .clone-header {

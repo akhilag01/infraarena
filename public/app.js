@@ -2116,7 +2116,7 @@ async function submitCloneAudio(audioBlob) {
             formData.append('user_id', currentUser?.id || '');
         }
         
-        const response = await fetch(`${API_BASE}/api/voice-clone`, {
+        const response = await fetch('/api/voice-clone', {
             method: 'POST',
             body: formData
         });
@@ -2166,7 +2166,7 @@ async function submitCloneVote(vote) {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/api/voice-clone/vote`, {
+        const response = await fetch('/api/voice-clone/vote', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
