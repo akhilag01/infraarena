@@ -165,10 +165,25 @@ class VoiceCloneService:
                 tmp.write(audio_bytes)
                 tmp_path = tmp.name
             
-            wav_path = None
+            wav_path = tmp_path.replace('.webm', '.wav')
             
             try:
-                files = {'file': ('recording.webm', audio_bytes, 'audio/webm')}
+                import imageio_ffmpeg
+                import subprocess
+                ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+                result = subprocess.run(
+                    [ffmpeg_path, '-y', '-i', tmp_path, '-ar', '16000', '-ac', '1', '-f', 'wav', wav_path],
+                    capture_output=True,
+                    timeout=30
+                )
+                if result.returncode != 0:
+                    print(f"[MiniMax Clone] FFmpeg error: {result.stderr.decode()}")
+                    raise Exception("Failed to convert audio to WAV format")
+                
+                with open(wav_path, 'rb') as f:
+                    wav_bytes = f.read()
+                
+                files = {'file': ('recording.wav', wav_bytes, 'audio/wav')}
                 data = {'purpose': 'voice_clone'}
                 response = await client.post(
                     'https://api.minimax.io/v1/files/upload',
@@ -176,16 +191,6 @@ class VoiceCloneService:
                     files=files,
                     data=data
                 )
-                
-                if response.status_code != 200 or 'invalid file ext' in response.text:
-                    print(f"[MiniMax Clone] WebM not accepted, trying MP3...")
-                    files = {'file': ('recording.mp3', audio_bytes, 'audio/mpeg')}
-                    response = await client.post(
-                        'https://api.minimax.io/v1/files/upload',
-                        headers={'Authorization': f'Bearer {self.minimax_api_key}'},
-                        files=files,
-                        data=data
-                    )
                 
                 response.raise_for_status()
                 upload_result = response.json()

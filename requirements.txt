@@ -11,3 +11,4 @@ supabase
 gotrue
 gradio_client
 pydub
+imageio-ffmpeg
