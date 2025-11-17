@@ -2120,7 +2120,7 @@ async function submitCloneAudio(audioBlob) {
         
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Clone failed');
+            throw new Error(error.detail || error.message || 'Clone failed');
         }
         
         const result = await response.json();
