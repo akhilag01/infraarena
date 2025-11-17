@@ -71,9 +71,9 @@ def calculate_elo_both_bad(rating_a: float, rating_b: float, k_factor: int = 32)
 
 class VoiceCloneService:
     def __init__(self):
-        self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
-        self.cartesia_api_key = os.getenv("CARTESIA_API_KEY")
-        self.minimax_api_key = os.getenv("MINIMAX_API_KEY")
+        self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY") or ""
+        self.cartesia_api_key = os.getenv("CARTESIA_API_KEY") or ""
+        self.minimax_api_key = os.getenv("MINIMAX_API_KEY") or ""
     
     async def clone_voice_elevenlabs(self, audio_bytes: bytes, text: str) -> bytes:
         async with httpx.AsyncClient(timeout=120.0) as client:
@@ -1619,11 +1619,11 @@ async def voice_clone(audio: UploadFile = File(...), user_id: str = Form(default
         clone_service = VoiceCloneService()
         
         clone_providers = []
-        if clone_service.elevenlabs_api_key and len(clone_service.elevenlabs_api_key) > 0:
+        if clone_service.elevenlabs_api_key:
             clone_providers.append('elevenlabs')
-        if clone_service.cartesia_api_key and len(clone_service.cartesia_api_key) > 0:
+        if clone_service.cartesia_api_key:
             clone_providers.append('cartesia')
-        if clone_service.minimax_api_key and len(clone_service.minimax_api_key) > 0:
+        if clone_service.minimax_api_key:
             clone_providers.append('minimax')
         
         print(f"[VoiceClone] Available providers: {clone_providers}")
