@@ -953,20 +953,38 @@ async def vote(request: VoteRequest):
 @app.get("/api/leaderboard")
 async def get_leaderboard():
     supabase = get_supabase()
-    response = supabase.table('tts_models').select('*').order('elo_rating', desc=True).execute()
-    models = response.data
     
-    return [
-        {
-            "name": model['name'],
-            "provider": model['provider'],
-            "elo": round(model['elo_rating'], 2),
-            "wins": model['wins'],
-            "losses": model['losses'],
-            "total_votes": model['total_votes']
-        }
-        for model in models
-    ]
+    voice_response = supabase.table('tts_models').select('*').order('elo_rating', desc=True).execute()
+    voice_models = voice_response.data
+    
+    clone_response = supabase.table('tts_models').select('*').order('clone_elo_rating', desc=True).execute()
+    clone_models = clone_response.data
+    
+    return {
+        "voice": [
+            {
+                "name": model['name'],
+                "provider": model['provider'],
+                "elo": round(model['elo_rating'], 2),
+                "wins": model['wins'],
+                "losses": model['losses'],
+                "total_votes": model['total_votes']
+            }
+            for model in voice_models
+        ],
+        "clone": [
+            {
+                "name": model['name'],
+                "provider": model['provider'],
+                "elo": round(model.get('clone_elo_rating', 1200), 2),
+                "wins": model.get('clone_wins', 0),
+                "losses": model.get('clone_losses', 0),
+                "total_votes": model.get('clone_total_votes', 0)
+            }
+            for model in clone_models
+            if model['name'] in ['eleven_multilingual_v2', 'sonic-3', 'minimax-speech-02']
+        ]
+    }
 
 @app.post("/api/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
@@ -1716,7 +1734,7 @@ async def voice_clone_vote(request: CloneVoteRequest):
     try:
         supabase = get_supabase()
         
-        models = supabase.table('tts_models').select('id, name, elo_rating').execute()
+        models = supabase.table('tts_models').select('id, name, clone_elo_rating, clone_wins, clone_losses, clone_total_votes').execute()
         model_map = {m['id']: m for m in models.data}
         
         model_a = model_map.get(request.model_a_id)
@@ -1725,22 +1743,49 @@ async def voice_clone_vote(request: CloneVoteRequest):
         if not model_a or not model_b:
             raise HTTPException(status_code=400, detail="Invalid model IDs")
         
-        rating_a = model_a['elo_rating']
-        rating_b = model_b['elo_rating']
+        rating_a = model_a.get('clone_elo_rating', 1200)
+        rating_b = model_b.get('clone_elo_rating', 1200)
+        
+        wins_a = model_a.get('clone_wins', 0)
+        wins_b = model_b.get('clone_wins', 0)
+        losses_a = model_a.get('clone_losses', 0)
+        losses_b = model_b.get('clone_losses', 0)
+        total_a = model_a.get('clone_total_votes', 0)
+        total_b = model_b.get('clone_total_votes', 0)
         
         if request.vote == 'A':
             new_rating_a, new_rating_b = calculate_elo(rating_a, rating_b)
+            wins_a += 1
+            losses_b += 1
         elif request.vote == 'B':
             new_rating_b, new_rating_a = calculate_elo(rating_b, rating_a)
+            wins_b += 1
+            losses_a += 1
         elif request.vote == 'tie':
             new_rating_a, new_rating_b = calculate_elo_tie(rating_a, rating_b)
         elif request.vote == 'both_bad':
             new_rating_a, new_rating_b = calculate_elo_both_bad(rating_a, rating_b)
+            losses_a += 1
+            losses_b += 1
         else:
             raise HTTPException(status_code=400, detail="Invalid vote")
         
-        supabase.table('tts_models').update({'elo_rating': new_rating_a}).eq('id', request.model_a_id).execute()
-        supabase.table('tts_models').update({'elo_rating': new_rating_b}).eq('id', request.model_b_id).execute()
+        total_a += 1
+        total_b += 1
+        
+        supabase.table('tts_models').update({
+            'clone_elo_rating': new_rating_a,
+            'clone_wins': wins_a,
+            'clone_losses': losses_a,
+            'clone_total_votes': total_a
+        }).eq('id', request.model_a_id).execute()
+        
+        supabase.table('tts_models').update({
+            'clone_elo_rating': new_rating_b,
+            'clone_wins': wins_b,
+            'clone_losses': losses_b,
+            'clone_total_votes': total_b
+        }).eq('id', request.model_b_id).execute()
         
         return {
             'message': 'Vote recorded',

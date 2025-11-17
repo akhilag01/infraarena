@@ -1320,7 +1320,11 @@ async function loadLeaderboard() {
         const leaderboardContent = document.getElementById('leaderboard-content');
         leaderboardContent.innerHTML = '';
         
-        data.forEach((model, index) => {
+        const voiceSection = document.createElement('div');
+        voiceSection.className = 'leaderboard-section';
+        voiceSection.innerHTML = '<h3 class="leaderboard-section-title">Voice</h3>';
+        
+        data.voice.forEach((model, index) => {
             const item = document.createElement('div');
             item.className = 'leaderboard-item';
             
@@ -1347,8 +1351,46 @@ async function loadLeaderboard() {
                 </div>
             `;
             
-            leaderboardContent.appendChild(item);
+            voiceSection.appendChild(item);
         });
+        
+        leaderboardContent.appendChild(voiceSection);
+        
+        const cloneSection = document.createElement('div');
+        cloneSection.className = 'leaderboard-section';
+        cloneSection.innerHTML = '<h3 class="leaderboard-section-title">Voice Clone</h3>';
+        
+        data.clone.forEach((model, index) => {
+            const item = document.createElement('div');
+            item.className = 'leaderboard-item';
+            
+            const winRate = model.total_votes > 0 
+                ? ((model.wins / model.total_votes) * 100).toFixed(1) 
+                : 0;
+            
+            const logo = getProviderLogo(model.provider);
+            
+            item.innerHTML = `
+                <div class="rank ${index < 3 ? 'top' : ''}">#${index + 1}</div>
+                <div class="model-info">
+                    <div class="model-name-with-logo">
+                        <div class="leaderboard-logo">${logo}</div>
+                        <div>
+                            <div class="model-name">${model.name}</div>
+                            <div class="model-provider">${model.provider}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="model-stats">
+                    <div class="elo">${model.elo}</div>
+                    <div class="win-rate">${winRate}% win rate</div>
+                </div>
+            `;
+            
+            cloneSection.appendChild(item);
+        });
+        
+        leaderboardContent.appendChild(cloneSection);
         
         showScreen(leaderboardScreen);
     } catch (error) {

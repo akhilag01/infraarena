@@ -1404,6 +1404,19 @@ header h1 {
     overflow-y: auto;
 }
 
+.leaderboard-section {
+    margin-bottom: 2rem;
+}
+
+.leaderboard-section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
 .empty-state {
     text-align: center;
     color: var(--text-tertiary);
