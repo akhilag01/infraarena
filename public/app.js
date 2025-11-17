@@ -2159,6 +2159,38 @@ function initCloneVoting() {
             const vote = btn.dataset.cloneVote;
             await submitCloneVote(vote);
         });
+        
+        btn.addEventListener('mouseenter', () => {
+            const vote = btn.dataset.cloneVote;
+            const cloneCardA = document.getElementById('clone-card-a');
+            const cloneCardB = document.getElementById('clone-card-b');
+            
+            if (cloneCardA && cloneCardB) {
+                if (vote === 'A') {
+                    cloneCardA.classList.add('preview-winner');
+                    cloneCardB.classList.add('preview-loser');
+                } else if (vote === 'B') {
+                    cloneCardB.classList.add('preview-winner');
+                    cloneCardA.classList.add('preview-loser');
+                } else if (vote === 'tie') {
+                    cloneCardA.classList.add('preview-winner');
+                    cloneCardB.classList.add('preview-winner');
+                } else if (vote === 'both_bad') {
+                    cloneCardA.classList.add('preview-loser');
+                    cloneCardB.classList.add('preview-loser');
+                }
+            }
+        });
+        
+        btn.addEventListener('mouseleave', () => {
+            const cloneCardA = document.getElementById('clone-card-a');
+            const cloneCardB = document.getElementById('clone-card-b');
+            
+            if (cloneCardA && cloneCardB) {
+                cloneCardA.classList.remove('preview-winner', 'preview-loser');
+                cloneCardB.classList.remove('preview-winner', 'preview-loser');
+            }
+        });
     });
     
     const cloneRegenBtn = document.getElementById('clone-regen-btn');

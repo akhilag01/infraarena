@@ -1282,13 +1282,15 @@ header h1 {
     box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
 }
 
-.voice-card.preview-winner {
+.voice-card.preview-winner,
+.clone-voice-card.preview-winner {
     border: 2px solid var(--success);
     box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
     transition: all 0.2s;
 }
 
-.voice-card.preview-loser {
+.voice-card.preview-loser,
+.clone-voice-card.preview-loser {
     border: 2px solid var(--danger);
     box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
     transition: all 0.2s;
