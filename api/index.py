@@ -179,9 +179,10 @@ class VoiceCloneService:
                     upload_result = response.json()
                     print(f"[MiniMax Clone] Upload response: {upload_result}")
                     
-                    if 'file' not in upload_result or 'file_id' not in upload_result.get('file', {}):
+                    file_data = upload_result.get('file') or {}
+                    if not isinstance(file_data, dict) or 'file_id' not in file_data:
                         raise Exception(f"MiniMax upload failed: {upload_result}")
-                    file_id = upload_result['file']['file_id']
+                    file_id = file_data['file_id']
                 
                 custom_voice_id = f'clone_{uuid.uuid4().hex[:8]}'
                 clone_response = await client.post(
