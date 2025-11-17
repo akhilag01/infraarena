@@ -732,7 +732,7 @@ header h1 {
     display: none !important;
 }
 
-.mode-clone #clone-vote-prompt {
+.mode-clone #clone-vote-prompt:not(.hidden) {
     display: block;
 }
 
