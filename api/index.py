@@ -165,31 +165,36 @@ class VoiceCloneService:
                 tmp.write(audio_bytes)
                 tmp_path = tmp.name
             
-            wav_path = tmp_path.replace('.webm', '.wav')
+            wav_path = None
             
             try:
-                from pydub import AudioSegment
-                audio = AudioSegment.from_file(tmp_path, format="webm")
-                audio = audio.set_frame_rate(16000).set_channels(1)
-                audio.export(wav_path, format="wav")
+                files = {'file': ('recording.webm', audio_bytes, 'audio/webm')}
+                data = {'purpose': 'voice_clone'}
+                response = await client.post(
+                    'https://api.minimax.io/v1/files/upload',
+                    headers={'Authorization': f'Bearer {self.minimax_api_key}'},
+                    files=files,
+                    data=data
+                )
                 
-                with open(wav_path, 'rb') as f:
-                    files = {'file': ('recording.wav', f, 'audio/wav')}
-                    data = {'purpose': 'voice_clone'}
+                if response.status_code != 200 or 'invalid file ext' in response.text:
+                    print(f"[MiniMax Clone] WebM not accepted, trying MP3...")
+                    files = {'file': ('recording.mp3', audio_bytes, 'audio/mpeg')}
                     response = await client.post(
                         'https://api.minimax.io/v1/files/upload',
                         headers={'Authorization': f'Bearer {self.minimax_api_key}'},
                         files=files,
                         data=data
                     )
-                    response.raise_for_status()
-                    upload_result = response.json()
-                    print(f"[MiniMax Clone] Upload response: {upload_result}")
-                    
-                    file_data = upload_result.get('file') or {}
-                    if not isinstance(file_data, dict) or 'file_id' not in file_data:
-                        raise Exception(f"MiniMax upload failed: {upload_result}")
-                    file_id = file_data['file_id']
+                
+                response.raise_for_status()
+                upload_result = response.json()
+                print(f"[MiniMax Clone] Upload response: {upload_result}")
+                
+                file_data = upload_result.get('file') or {}
+                if not isinstance(file_data, dict) or 'file_id' not in file_data:
+                    raise Exception(f"MiniMax upload failed: {upload_result}")
+                file_id = file_data['file_id']
                 
                 custom_voice_id = f'clone_{uuid.uuid4().hex[:8]}'
                 clone_response = await client.post(
@@ -216,7 +221,7 @@ class VoiceCloneService:
                     raise Exception(f"Unexpected MiniMax response: {result}")
             finally:
                 os.unlink(tmp_path)
-                if os.path.exists(wav_path):
+                if wav_path and os.path.exists(wav_path):
                     os.unlink(wav_path)
 
 # TTS Service
