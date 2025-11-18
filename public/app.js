@@ -2048,28 +2048,11 @@ function initCloneRecording() {
     const cloneTimer = document.getElementById('clone-timer');
     const cloneStatus = document.getElementById('clone-status');
     
-    cloneRecordBtn.addEventListener('mousedown', async (e) => {
+    cloneRecordBtn.addEventListener('click', async (e) => {
         e.preventDefault();
-        await startCloneRecording();
-    });
-    
-    cloneRecordBtn.addEventListener('mouseup', () => {
-        stopCloneRecording();
-    });
-    
-    cloneRecordBtn.addEventListener('mouseleave', () => {
-        if (cloneRecorder && cloneRecorder.state === 'recording') {
-            stopCloneRecording();
+        if (!cloneRecorder || cloneRecorder.state !== 'recording') {
+            await startCloneRecording();
         }
-    });
-    
-    cloneRecordBtn.addEventListener('touchstart', async (e) => {
-        e.preventDefault();
-        await startCloneRecording();
-    });
-    
-    cloneRecordBtn.addEventListener('touchend', () => {
-        stopCloneRecording();
     });
 }
 
@@ -2118,7 +2101,7 @@ async function startCloneRecording() {
             const secs = elapsed % 60;
             cloneTimer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
             
-            if (elapsed >= 15) {
+            if (elapsed >= 10) {
                 stopCloneRecording();
             }
         }, 100);
@@ -2137,7 +2120,7 @@ function stopCloneRecording() {
         clearInterval(cloneRecordingTimer);
         cloneRecorder.stop();
         cloneRecordBtn.classList.remove('recording');
-        cloneRecordBtn.querySelector('span').textContent = 'Hold to Record (5-15 seconds)';
+        cloneRecordBtn.querySelector('span').textContent = 'Click to Record (10 seconds)';
         cloneTimer.classList.add('hidden');
     }
 }
