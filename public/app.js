@@ -2038,7 +2038,7 @@ function resetCloneInterface() {
     cloneVotePrompt.classList.add('hidden');
     cloneStatus.textContent = '';
     cloneTimer.classList.add('hidden');
-    cloneTimer.textContent = '0:00';
+    cloneTimer.textContent = '10s';
     cloneRecordBtn.classList.remove('recording');
     cloneRecordBtn.querySelector('span').textContent = 'Hold to Record (5-15 seconds)';
 }
@@ -2097,9 +2097,8 @@ async function startCloneRecording() {
         
         cloneRecordingTimer = setInterval(() => {
             const elapsed = Math.floor((Date.now() - cloneRecordingStartTime) / 1000);
-            const mins = Math.floor(elapsed / 60);
-            const secs = elapsed % 60;
-            cloneTimer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+            const remaining = Math.max(0, 10 - elapsed);
+            cloneTimer.textContent = `${remaining}s`;
             
             if (elapsed >= 10) {
                 stopCloneRecording();
