@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Arena</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Arena</h1>
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="voice">Voice Arena</button>
+                <button class="tab-btn" data-tab="search">Search Arena</button>
+            </div>
+        </header>
+
+        <main id="main-content">
+            <!-- Voice Arena Screens -->
+            <div id="voice-arena" class="arena-section active">
+                <div id="start-screen" class="screen active">
+                    <p class="subtitle">Compare TTS models side by side</p>
+                    <button id="start-btn" class="primary-btn">Start Voice Conversation</button>
+                    <button id="leaderboard-btn" class="secondary-btn">View Voice Leaderboard</button>
+                </div>
+
+                <div id="chat-screen" class="screen">
+                    <div id="chat-messages" class="chat-messages"></div>
+                    
+                    <div id="vote-prompt" class="vote-prompt hidden">
+                        <p>Which voice did you prefer?</p>
+                        <div class="vote-buttons">
+                            <button class="vote-btn" data-vote="A">Voice A</button>
+                            <button class="vote-btn" data-vote="B">Voice B</button>
+                        </div>
+                    </div>
+
+                    <div class="input-container">
+                        <div class="input-wrapper">
+                            <input type="text" id="message-input" placeholder="Type your message..." />
+                            <button id="send-btn" class="icon-btn">
+                                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                    <path d="M2 10L18 3L13 10L18 17L2 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <button id="voice-btn" class="voice-btn">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 1C10.34 1 9 2.34 9 4V12C9 13.66 10.34 15 12 15C13.66 15 15 13.66 15 12V4C15 2.34 13.66 1 12 1Z" fill="currentColor"/>
+                                <path d="M19 10V12C19 15.87 15.87 19 12 19C8.13 19 5 15.87 5 12V10H3V12C3 16.97 7.03 21 12 21C16.97 21 21 16.97 21 12V10H19Z" fill="currentColor"/>
+                                <path d="M11 21V23H13V21H11Z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="leaderboard-screen" class="screen">
+                    <div class="leaderboard-header">
+                        <h2>Voice Leaderboard</h2>
+                        <button id="back-btn" class="secondary-btn">Back</button>
+                    </div>
+                    <div id="leaderboard-content" class="leaderboard-content"></div>
+                </div>
+            </div>
+
+            <!-- Search Arena Screens -->
+            <div id="search-arena" class="arena-section">
+                <div id="search-start-screen" class="screen active">
+                    <p class="subtitle">Compare Search Models & APIs</p>
+                    <button id="search-start-btn" class="primary-btn">Start Search Session</button>
+                    <button id="search-leaderboard-btn" class="secondary-btn">View Search Leaderboard</button>
+                </div>
+
+                <div id="search-chat-screen" class="screen">
+                    <div id="search-chat-messages" class="chat-messages"></div>
+                    
+                    <div id="search-vote-prompt" class="vote-prompt hidden">
+                        <p>Which result did you prefer?</p>
+                        <div class="vote-buttons">
+                            <button class="vote-btn" data-vote="A">Result A</button>
+                            <button class="vote-btn" data-vote="B">Result B</button>
+                        </div>
+                    </div>
+
+                    <div class="input-container">
+                        <div class="input-wrapper">
+                            <input type="text" id="search-message-input" placeholder="Enter your search query..." />
+                            <button id="search-send-btn" class="icon-btn">
+                                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                    <path d="M2 10L18 3L13 10L18 17L2 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="search-leaderboard-screen" class="screen">
+                    <div class="leaderboard-header">
+                        <h2>Search Leaderboard</h2>
+                        <button id="search-back-btn" class="secondary-btn">Back</button>
+                    </div>
+                    <div id="search-leaderboard-content" class="leaderboard-content"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
